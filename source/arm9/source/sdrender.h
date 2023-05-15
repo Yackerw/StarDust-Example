@@ -161,7 +161,7 @@ struct SDMaterial {
 	f32 texOffsY;
 	f32 texScaleX;
 	f32 texScaleY;
-	Vec3 emission;
+	Vec3i emission;
 };
 
 typedef struct {
@@ -193,6 +193,8 @@ void RenderModel(Model *model, m4x4 *matrix, SDMaterial *mats);
 void UploadTexture(Texture* input);
 
 Texture *LoadTexture(char *input, bool upload);
+
+void UnloadTexture(Texture* tex);
 
 void SetLightDir(int x, int y, int z);
 
