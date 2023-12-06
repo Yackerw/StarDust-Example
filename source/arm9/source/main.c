@@ -105,6 +105,10 @@ int main() {
 	WindowsInitialization();
 #endif
 
+	InitializeNetworking(1, 1);
+
+	InitializeAsyncFiles();
+
 	InitializeSubBG();
 
 	// be sure to set up lighting
@@ -117,12 +121,12 @@ int main() {
 	AddCollisionBetweenLayers(1, 2);
 
 	// register object type 0 to execute no code so we can use it for misc things
-	AddObjectType(NULL, NULL, NULL, NULL, NULL);
+	AddObjectType(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false);
 	// register object type 1 to be our player
-	int playerId = AddObjectType(PlayerUpdate, PlayerStart, PlayerCollide, PlayerLateUpdate, PlayerDestroy);
+	int playerId = AddObjectType(PlayerUpdate, PlayerStart, PlayerCollide, PlayerLateUpdate, PlayerDestroy, NULL, NULL, NULL, false);
 
 	Vec3 zero = { 0, 0, 0 };
-	Object* world = CreateObject(0, &zero);
+	Object* world = CreateObject(0, &zero, false);
 	world->mesh = LoadModel("nitro:/testmap/testmap.sdm");
 	world->meshCol = MeshColliderFromMesh(world->mesh);
 	world->scale.x = world->mesh->defaultScale;
@@ -135,7 +139,7 @@ int main() {
 	// Fixed32ToNative will convert fixed values to floats on PC. 4096 = 1.0f
 	Vec3 up = { 0, Fixed32ToNative(4096), 0 };
 
-	Object* player = CreateObject(playerId, &up);
+	Object* player = CreateObject(playerId, &up, false);
 	
 	InitDeltaTime();
 	deltaTimeEngine = true;
@@ -154,11 +158,9 @@ int main() {
 
 		// flush screen
 #ifndef _NOTDS
-		glFlush(0);
+		AsyncFileHandler();
 		glClearDepth(GL_MAX_DEPTH); // reset depth buffer, good idea to set to GL_MAX_DEPTH
 		UpdateMusicBuffer();
-		// v-sync
-		swiWaitForVBlank();
 		oamUpdate(&oamMain);
 		oamUpdate(&oamSub);
 		bgUpdate();

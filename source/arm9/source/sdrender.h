@@ -28,6 +28,8 @@ extern int ambientColor;
 enum SpriteRenderPositionX {SpriteAlignLeft, SpriteAlignCenter, SpriteAlignRight};
 enum SpriteRenderPositionY {SpriteAlignTop, SpriteAlignBottom = 2};
 
+enum VertexHeaderBitflags {VTX_MATERIAL_CHANGE = 1, VTX_STRIPS = 2, VTX_QUAD = 4};
+
 typedef struct {
 	v16 x;
 	v16 y;
@@ -41,7 +43,7 @@ typedef struct {
 
 typedef struct {
 	short count;
-	bool materialChange;
+	unsigned char bitFlags;
 	unsigned char material;
 	Vertex vertices;
 } VertexHeader;
@@ -124,6 +126,7 @@ typedef struct {
 	int itemCount;
 	AnimatorItem *items;
 	bool loop;
+	bool paused;
 } Animator;
 
 typedef struct Texture Texture;
@@ -156,7 +159,7 @@ struct SDMaterial {
 	bool backFaceCulling;
 	bool lit;
 	char specular;
-	char padding2;
+	char padding;
 	f32 texOffsX;
 	f32 texOffsY;
 	f32 texScaleX;
@@ -182,9 +185,16 @@ typedef struct {
 
 extern Texture startTexture;
 
+void SetupModelFromMemory(Model* model, char* textureDir, bool asyncTextures, void (*asyncCallback)(void* data), void* asyncCallbackData);
+
 Model *LoadModel(char *input);
 
+int LoadModelAsync(char* input, void (*callBack)(void* data, Model* model), void* callBackData);
+
 void CacheModel(Model* reference);
+
+// does not work with code generated models
+Model* FreeModelKeepCache(Model* model);
 
 void UpdateModel(Model* model);
 
@@ -192,7 +202,11 @@ void RenderModel(Model *model, m4x4 *matrix, SDMaterial *mats);
 
 void UploadTexture(Texture* input);
 
+void LoadTextureFromRAM(Texture* input, bool upload, char* name);
+
 Texture *LoadTexture(char *input, bool upload);
+
+void LoadTextureAsync(char* input, bool upload, void (*callBack)(void* data, Texture* texture), void* callBackData);
 
 void UnloadTexture(Texture* tex);
 
@@ -204,7 +218,11 @@ void SetAmbientColor(int color);
 
 void RenderModelRigged(Model *model, m4x4 *matrix, SDMaterial *mats, Animator *animator);
 
+void LoadAnimationFromRAM(Animation* anim);
+
 Animation *LoadAnimation(char *input);
+
+int LoadAnimationAsync(char* input, void (*callBack)(void* data, Animation* anim), void* callBackData);
 
 Animator *CreateAnimator(Model *referenceModel);
 

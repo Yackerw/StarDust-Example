@@ -2,10 +2,11 @@
 #include "sdcollision.h"
 #include <nds.h>
 #include "sdmath.h"
+#include <stdint.h>
 #define OCTREE_MAX_DEPTH 10
 #define OCTREE_MAX_TRIS 40
 // note: barely noticeable slowdown from this, and fixes a bug with large polygons
-#define BARY64
+#define FLOATBARY
 
 float dotf(float x1, float y1, float z1, float x2, float y2, float z2) {
 	return x1 * x2 + y1 * y2 + z1 * z2;
@@ -178,6 +179,12 @@ bool SphereOnTriangleVertex(CollisionSphere *sphere, CollisionTriangle *tri, Vec
 	return false;
 }
 
+#ifndef _NOTDS
+long long dot64_2(long long x1, long long y1, long long z1, long long x2, long long y2, long long z2) {
+	return mulf64(x1, x2) + mulf64(y1, y2) + mulf64(z1, z2);
+}
+#endif
+
 bool SphereOnTrianglePlane(CollisionSphere *sphere, CollisionTriangle *tri, Vec3 *normal, f32 *penetration, bool *onPlane) {
 	// adjust sphere so triangle is origin
 	Vec3 newSpherePosition;
@@ -223,7 +230,7 @@ MeshCollider *LoadCollisionMesh(char *input) {
 	MeshCollider *mesh = malloc(fileSize);
 	fread(mesh, fileSize, 1, f);
 	fclose(f);
-	mesh->triangles = (CollisionTriangle*)((uint)mesh + (uint)mesh->triangles);
+	mesh->triangles = (CollisionTriangle*)((uint32_t)mesh + (uint32_t)mesh->triangles);
 	return mesh;
 }
 
@@ -289,6 +296,15 @@ bool AABBCheck(Vec3 *minA, Vec3 *maxA, Vec3 *minB, Vec3 *maxB) {
 		maxA->z >= minB->z);
 }
 
+bool AABBCheckLeniency(Vec3* minA, Vec3* maxA, Vec3* minB, Vec3* maxB, f32 leniency) {
+	return (minA->x <= maxB->x + leniency &&
+		maxA->x >= minB->x - leniency &&
+		minA->y <= maxB->y + leniency &&
+		maxA->y >= minB->y - leniency &&
+		minA->z <= maxB->z + leniency &&
+		maxA->z >= minB->z - leniency);
+}
+
 void GenerateOctree(CollisionBlock *currBlock, MeshCollider *currMesh, int currDepth) {
 	++currDepth;
 	currBlock->subdivided = false;
@@ -297,7 +313,12 @@ void GenerateOctree(CollisionBlock *currBlock, MeshCollider *currMesh, int currD
 	currBlock->triangleList = (unsigned int*)malloc(sizeof(unsigned int) * maxTris);
 	// iterate over all the collision triangles in the mesh and see if they fall within the block
 	for (int i = 0; i < currMesh->triCount; ++i) {
+#ifdef _NOTDS
 		if (AABBCheck(&currBlock->boundsMin, &currBlock->boundsMax, &currMesh->triangles[i].boundsMin, &currMesh->triangles[i].boundsMax)) {
+#else
+		// fixes occasionally broken faces on DS
+		if (AABBCheckLeniency(&currBlock->boundsMin, &currBlock->boundsMax, &currMesh->triangles[i].boundsMin, &currMesh->triangles[i].boundsMax, 1)) {
+#endif
 			currBlock->triangleList[currBlock->triCount] = i;
 			++currBlock->triCount;
 			// max tris, either start a new subdivision or increase tri count
@@ -340,8 +361,24 @@ MeshCollider *MeshColliderFromMesh(Model *input) {
 	int triCount = 0;
 	VertexHeader* currVertexGroup = input->vertexGroups;
 	for (int i = 0; i < input->vertexGroupCount; ++i) {
-		triCount += currVertexGroup->count / 3;
-		currVertexGroup = (VertexHeader*)((uint)(&(currVertexGroup->vertices)) + (uint)(sizeof(Vertex) * (currVertexGroup->count)));
+		if (!(currVertexGroup->bitFlags & VTX_QUAD)) {
+			if (currVertexGroup->bitFlags & VTX_STRIPS) {
+				triCount += 1 + (currVertexGroup->count - 3);
+			}
+			else {
+				triCount += currVertexGroup->count / 3;
+			}
+		}
+		else {
+			if (currVertexGroup->bitFlags & VTX_STRIPS) {
+				// two verts to make one quad, or two triangles.
+				triCount += 2 + (currVertexGroup->count - 4);
+			}
+			else {
+				triCount += (currVertexGroup->count / 4) * 2;
+			}
+		}
+		currVertexGroup = (VertexHeader*)((uint32_t)(&(currVertexGroup->vertices)) + (uint32_t)(sizeof(Vertex) * (currVertexGroup->count)));
 	}
 	retValue->triangles = (CollisionTriangle*)malloc(sizeof(CollisionTriangle)*triCount);
 	retValue->triCount = triCount;
@@ -351,31 +388,180 @@ MeshCollider *MeshColliderFromMesh(Model *input) {
 		Vertex *currVerts = &currVertexGroup->vertices;
 		for (int j = 0; j < currVertexGroup->count; j += 3) {
 			// get verts...
-			for (int k = 0; k < 3; ++k) {
-				retValue->triangles[currTri].verts[k].x = currVerts[j+k].x;
-				retValue->triangles[currTri].verts[k].y = currVerts[j+k].y;
-				retValue->triangles[currTri].verts[k].z = currVerts[j+k].z;
+			if (!(currVertexGroup->bitFlags & VTX_QUAD)) {
+				if (!(currVertexGroup->bitFlags & VTX_STRIPS) || j < 3) {
+					for (int k = 0; k < 3; ++k) {
+						retValue->triangles[currTri].verts[k].x = currVerts[j + k].x;
+						retValue->triangles[currTri].verts[k].y = currVerts[j + k].y;
+						retValue->triangles[currTri].verts[k].z = currVerts[j + k].z;
+					}
+				}
+				else {
+					// not sure why i have to reverse the winding order for these, but i do
+					if ((j & 1) == 0) {
+						retValue->triangles[currTri].verts[1].x = currVerts[j - 2].x;
+						retValue->triangles[currTri].verts[1].y = currVerts[j - 2].y;
+						retValue->triangles[currTri].verts[1].z = currVerts[j - 2].z;
+						retValue->triangles[currTri].verts[2].x = currVerts[j - 1].x;
+						retValue->triangles[currTri].verts[2].y = currVerts[j - 1].y;
+						retValue->triangles[currTri].verts[2].z = currVerts[j - 1].z;
+						retValue->triangles[currTri].verts[0].x = currVerts[j].x;
+						retValue->triangles[currTri].verts[0].y = currVerts[j].y;
+						retValue->triangles[currTri].verts[0].z = currVerts[j].z;
+					}
+					else {
+						retValue->triangles[currTri].verts[2].x = currVerts[j - 2].x;
+						retValue->triangles[currTri].verts[2].y = currVerts[j - 2].y;
+						retValue->triangles[currTri].verts[2].z = currVerts[j - 2].z;
+						retValue->triangles[currTri].verts[1].x = currVerts[j - 1].x;
+						retValue->triangles[currTri].verts[1].y = currVerts[j - 1].y;
+						retValue->triangles[currTri].verts[1].z = currVerts[j - 1].z;
+						retValue->triangles[currTri].verts[0].x = currVerts[j].x;
+						retValue->triangles[currTri].verts[0].y = currVerts[j].y;
+						retValue->triangles[currTri].verts[0].z = currVerts[j].z;
+					}
+					// fix j to increment for 1 vert instead of 1 tri
+					j -= 2;
+				}
+				retValue->triangles[currTri].boundsMax.x = -4000000;
+				retValue->triangles[currTri].boundsMax.y = -4000000;
+				retValue->triangles[currTri].boundsMax.z = -4000000;
+				retValue->triangles[currTri].boundsMin.x = 4000000;
+				retValue->triangles[currTri].boundsMin.y = 4000000;
+				retValue->triangles[currTri].boundsMin.z = 4000000;
+				// calculate bounds extents now
+				for (int k = 0; k < 3; ++k) {
+					retValue->triangles[currTri].boundsMax.x = Max(retValue->triangles[currTri].boundsMax.x, currVerts[j + k].x);
+					retValue->triangles[currTri].boundsMax.y = Max(retValue->triangles[currTri].boundsMax.y, currVerts[j + k].y);
+					retValue->triangles[currTri].boundsMax.z = Max(retValue->triangles[currTri].boundsMax.z, currVerts[j + k].z);
+					retValue->triangles[currTri].boundsMin.x = Min(retValue->triangles[currTri].boundsMin.x, currVerts[j + k].x);
+					retValue->triangles[currTri].boundsMin.y = Min(retValue->triangles[currTri].boundsMin.y, currVerts[j + k].y);
+					retValue->triangles[currTri].boundsMin.z = Min(retValue->triangles[currTri].boundsMin.z, currVerts[j + k].z);
+				}
+				// calculate normal
+				NormalFromVertsFloat(&retValue->triangles[currTri].verts[0], &retValue->triangles[currTri].verts[1], &retValue->triangles[currTri].verts[2], &retValue->triangles[currTri].normal);
+				currTri += 1;
 			}
-			retValue->triangles[currTri].boundsMax.x = -4000000;
-			retValue->triangles[currTri].boundsMax.y = -4000000;
-			retValue->triangles[currTri].boundsMax.z = -4000000;
-			retValue->triangles[currTri].boundsMin.x = 4000000;
-			retValue->triangles[currTri].boundsMin.y = 4000000;
-			retValue->triangles[currTri].boundsMin.z = 4000000;
-			// calculate bounds extents now
-			for (int k = 0; k < 3; ++k) {
-				retValue->triangles[currTri].boundsMax.x = Max(retValue->triangles[currTri].boundsMax.x, currVerts[j+k].x);
-				retValue->triangles[currTri].boundsMax.y = Max(retValue->triangles[currTri].boundsMax.y, currVerts[j+k].y);
-				retValue->triangles[currTri].boundsMax.z = Max(retValue->triangles[currTri].boundsMax.z, currVerts[j+k].z);
-				retValue->triangles[currTri].boundsMin.x = Min(retValue->triangles[currTri].boundsMin.x, currVerts[j+k].x);
-				retValue->triangles[currTri].boundsMin.y = Min(retValue->triangles[currTri].boundsMin.y, currVerts[j+k].y);
-				retValue->triangles[currTri].boundsMin.z = Min(retValue->triangles[currTri].boundsMin.z, currVerts[j+k].z);
+			else {
+				if (!(currVertexGroup->bitFlags & VTX_STRIPS) || j < 4) {
+					for (int k = 0; k < 3; ++k) {
+						retValue->triangles[currTri].verts[k].x = currVerts[j + k].x;
+						retValue->triangles[currTri].verts[k].y = currVerts[j + k].y;
+						retValue->triangles[currTri].verts[k].z = currVerts[j + k].z;
+					}
+					retValue->triangles[currTri].boundsMax.x = -4000000;
+					retValue->triangles[currTri].boundsMax.y = -4000000;
+					retValue->triangles[currTri].boundsMax.z = -4000000;
+					retValue->triangles[currTri].boundsMin.x = 4000000;
+					retValue->triangles[currTri].boundsMin.y = 4000000;
+					retValue->triangles[currTri].boundsMin.z = 4000000;
+					// calculate bounds extents now
+					for (int k = 0; k < 3; ++k) {
+						retValue->triangles[currTri].boundsMax.x = Max(retValue->triangles[currTri].boundsMax.x, currVerts[j + k].x);
+						retValue->triangles[currTri].boundsMax.y = Max(retValue->triangles[currTri].boundsMax.y, currVerts[j + k].y);
+						retValue->triangles[currTri].boundsMax.z = Max(retValue->triangles[currTri].boundsMax.z, currVerts[j + k].z);
+						retValue->triangles[currTri].boundsMin.x = Min(retValue->triangles[currTri].boundsMin.x, currVerts[j + k].x);
+						retValue->triangles[currTri].boundsMin.y = Min(retValue->triangles[currTri].boundsMin.y, currVerts[j + k].y);
+						retValue->triangles[currTri].boundsMin.z = Min(retValue->triangles[currTri].boundsMin.z, currVerts[j + k].z);
+					}
+					// calculate normal
+					NormalFromVertsFloat(&retValue->triangles[currTri].verts[0], &retValue->triangles[currTri].verts[1], &retValue->triangles[currTri].verts[2], &retValue->triangles[currTri].normal);
+					currTri += 1;
+					++j;
+					retValue->triangles[currTri].verts[0].x = currVerts[j + 2].x;
+					retValue->triangles[currTri].verts[0].y = currVerts[j + 2].y;
+					retValue->triangles[currTri].verts[0].z = currVerts[j + 2].z;
+					retValue->triangles[currTri].verts[1] = retValue->triangles[currTri - 1].verts[0];
+					retValue->triangles[currTri].verts[2] = retValue->triangles[currTri - 1].verts[2];
+					// reverse winding if it's a strip
+					if (currVertexGroup->bitFlags & VTX_STRIPS) {
+						Vec3 tmp = retValue->triangles[currTri].verts[0];
+						retValue->triangles[currTri].verts[0] = retValue->triangles[currTri - 1].verts[1];
+						retValue->triangles[currTri].verts[1] = tmp;
+						retValue->triangles[currTri].verts[2] = retValue->triangles[currTri - 1].verts[2];
+					}
+					retValue->triangles[currTri].boundsMax.x = -4000000;
+					retValue->triangles[currTri].boundsMax.y = -4000000;
+					retValue->triangles[currTri].boundsMax.z = -4000000;
+					retValue->triangles[currTri].boundsMin.x = 4000000;
+					retValue->triangles[currTri].boundsMin.y = 4000000;
+					retValue->triangles[currTri].boundsMin.z = 4000000;
+					// calculate bounds extents now
+					for (int k = 0; k < 3; ++k) {
+						retValue->triangles[currTri].boundsMax.x = Max(retValue->triangles[currTri].boundsMax.x, retValue->triangles[currTri].verts[k].x);
+						retValue->triangles[currTri].boundsMax.y = Max(retValue->triangles[currTri].boundsMax.y, retValue->triangles[currTri].verts[k].y);
+						retValue->triangles[currTri].boundsMax.z = Max(retValue->triangles[currTri].boundsMax.z, retValue->triangles[currTri].verts[k].z);
+						retValue->triangles[currTri].boundsMin.x = Min(retValue->triangles[currTri].boundsMin.x, retValue->triangles[currTri].verts[k].x);
+						retValue->triangles[currTri].boundsMin.y = Min(retValue->triangles[currTri].boundsMin.y, retValue->triangles[currTri].verts[k].y);
+						retValue->triangles[currTri].boundsMin.z = Min(retValue->triangles[currTri].boundsMin.z, retValue->triangles[currTri].verts[k].z);
+					}
+					// calculate normal
+					NormalFromVertsFloat(&retValue->triangles[currTri].verts[0], &retValue->triangles[currTri].verts[1], &retValue->triangles[currTri].verts[2], &retValue->triangles[currTri].normal);
+				}
+				else {
+					// create virtual quad
+					Vec3 quad[4];
+					quad[0].x = currVerts[j - 1].x;
+					quad[0].y = currVerts[j - 1].y;
+					quad[0].z = currVerts[j - 1].z;
+					quad[1].x = currVerts[j - 2].x;
+					quad[1].y = currVerts[j - 2].y;
+					quad[1].z = currVerts[j - 2].z;
+					quad[2].x = currVerts[j + 1].x;
+					quad[2].y = currVerts[j + 1].y;
+					quad[2].z = currVerts[j + 1].z;
+					quad[3].x = currVerts[j].x;
+					quad[3].y = currVerts[j].y;
+					quad[3].z = currVerts[j].z;
+					// adjust j position
+					j -= 1;
+
+					retValue->triangles[currTri].verts[0] = quad[2];
+					retValue->triangles[currTri].verts[1] = quad[1];
+					retValue->triangles[currTri].verts[2] = quad[0];
+					retValue->triangles[currTri].boundsMax.x = -4000000;
+					retValue->triangles[currTri].boundsMax.y = -4000000;
+					retValue->triangles[currTri].boundsMax.z = -4000000;
+					retValue->triangles[currTri].boundsMin.x = 4000000;
+					retValue->triangles[currTri].boundsMin.y = 4000000;
+					retValue->triangles[currTri].boundsMin.z = 4000000;
+					// calculate bounds extents now
+					for (int k = 0; k < 3; ++k) {
+						retValue->triangles[currTri].boundsMax.x = Max(retValue->triangles[currTri].boundsMax.x, retValue->triangles[currTri].verts[k].x);
+						retValue->triangles[currTri].boundsMax.y = Max(retValue->triangles[currTri].boundsMax.y, retValue->triangles[currTri].verts[k].y);
+						retValue->triangles[currTri].boundsMax.z = Max(retValue->triangles[currTri].boundsMax.z, retValue->triangles[currTri].verts[k].z);
+						retValue->triangles[currTri].boundsMin.x = Min(retValue->triangles[currTri].boundsMin.x, retValue->triangles[currTri].verts[k].x);
+						retValue->triangles[currTri].boundsMin.y = Min(retValue->triangles[currTri].boundsMin.y, retValue->triangles[currTri].verts[k].y);
+						retValue->triangles[currTri].boundsMin.z = Min(retValue->triangles[currTri].boundsMin.z, retValue->triangles[currTri].verts[k].z);
+					}
+					// calculate normal
+					NormalFromVertsFloat(&retValue->triangles[currTri].verts[0], &retValue->triangles[currTri].verts[1], &retValue->triangles[currTri].verts[2], &retValue->triangles[currTri].normal);
+					currTri += 1;
+					retValue->triangles[currTri].verts[0] = quad[1];
+					retValue->triangles[currTri].verts[1] = quad[2];
+					retValue->triangles[currTri].verts[2] = quad[3];
+					retValue->triangles[currTri].boundsMax.x = -4000000;
+					retValue->triangles[currTri].boundsMax.y = -4000000;
+					retValue->triangles[currTri].boundsMax.z = -4000000;
+					retValue->triangles[currTri].boundsMin.x = 4000000;
+					retValue->triangles[currTri].boundsMin.y = 4000000;
+					retValue->triangles[currTri].boundsMin.z = 4000000;
+					// calculate bounds extents now
+					for (int k = 0; k < 3; ++k) {
+						retValue->triangles[currTri].boundsMax.x = Max(retValue->triangles[currTri].boundsMax.x, retValue->triangles[currTri].verts[k].x);
+						retValue->triangles[currTri].boundsMax.y = Max(retValue->triangles[currTri].boundsMax.y, retValue->triangles[currTri].verts[k].y);
+						retValue->triangles[currTri].boundsMax.z = Max(retValue->triangles[currTri].boundsMax.z, retValue->triangles[currTri].verts[k].z);
+						retValue->triangles[currTri].boundsMin.x = Min(retValue->triangles[currTri].boundsMin.x, retValue->triangles[currTri].verts[k].x);
+						retValue->triangles[currTri].boundsMin.y = Min(retValue->triangles[currTri].boundsMin.y, retValue->triangles[currTri].verts[k].y);
+						retValue->triangles[currTri].boundsMin.z = Min(retValue->triangles[currTri].boundsMin.z, retValue->triangles[currTri].verts[k].z);
+					}
+					// calculate normal
+					NormalFromVertsFloat(&retValue->triangles[currTri].verts[0], &retValue->triangles[currTri].verts[1], &retValue->triangles[currTri].verts[2], &retValue->triangles[currTri].normal);
+				}
+				currTri += 1;
 			}
-			// calculate normal
-			NormalFromVertsFloat(&retValue->triangles[currTri].verts[0], &retValue->triangles[currTri].verts[1], &retValue->triangles[currTri].verts[2], &retValue->triangles[currTri].normal);
-			currTri += 1;
 		}
-		currVertexGroup = (VertexHeader*)((uint)(&(currVertexGroup->vertices)) + (uint)(sizeof(Vertex) * (currVertexGroup->count)));
+		currVertexGroup = (VertexHeader*)((uint32_t)(&(currVertexGroup->vertices)) + (uint32_t)(sizeof(Vertex) * (currVertexGroup->count)));
 	}
 #ifdef _NOTDS
 	for (int i = 0; i < retValue->triCount; ++i) {
@@ -480,7 +666,7 @@ void DestroyCollisionMesh(MeshCollider* meshCollider) {
 }
 
 // doesn't return position by default since this should rarely be used by actual game code
-bool RayOnAABB(Vec3* point, Vec3* direction, Vec3* boxMin, Vec3* boxMax, f32* t) {
+bool RayOnAABB(Vec3* point, Vec3* direction, Vec3* boxMin, Vec3* boxMax, Vec3* normal, f32* t) {
 	Vec3 tMin, tMax;
 	Vec3 workVec;
 	Vec3 newDir = *direction;
@@ -503,8 +689,28 @@ bool RayOnAABB(Vec3* point, Vec3* direction, Vec3* boxMin, Vec3* boxMax, f32* t)
 	Vec3 t2 = { Max(tMin.x, tMax.x), Max(tMin.y, tMax.y), Max(tMin.z, tMax.z) };
 	f32 tNear = Max(t1.x, Max(t1.y, t1.z));
 	f32 tFar = Min(t2.x, Min(t2.y, t2.z));
+	f32 dist;
+	if (tNear < 0) {
+		dist = tFar;
+	}
+	else {
+		dist = tNear;
+	}
 	if (t != NULL) {
-		*t = tNear;
+		*t = dist;
+	}
+	// find normal
+	if (normal != NULL) {
+		f32 tSeries[] = { tMin.x, tMax.x, tMin.y, tMax.y, tMin.z, tMax.z };
+		Vec3 normals[] = { {Fixed32ToNative(-4096), 0, 0 }, {Fixed32ToNative(4096), 0, 0},
+			{0, Fixed32ToNative(-4096), 0}, {0, Fixed32ToNative(4096), 0},
+			{0, 0, Fixed32ToNative(-4096)}, {0, 0, Fixed32ToNative(4096)} };
+		for (int i = 0; i < 6; ++i) {
+			if (dist == tSeries[i]) {
+				*normal = normals[i];
+				break;
+			}
+		}
 	}
 	return tNear <= tFar && tFar >= 0;
 #else
@@ -546,9 +752,31 @@ bool RayOnAABB(Vec3* point, Vec3* direction, Vec3* boxMin, Vec3* boxMax, f32* t)
 		tFar = t23;
 	}
 	// who cares if it gets truncated
-	if (t != NULL) {
-		*t = tNear;
+	long long dist;
+	if (tNear < 0) {
+		dist = tFar;
 	}
+	else {
+		dist = tNear;
+	}
+	if (t != NULL) {
+		*t = dist;
+	}
+
+	// return normal as well
+	if (normal != NULL) {
+		f32 tSeries[] = { tMin1, tMax1, tMin2, tMax2, tMin3, tMax3 };
+		Vec3 normals[] = { {Fixed32ToNative(-4096), 0, 0 }, {Fixed32ToNative(4096), 0, 0},
+			{0, Fixed32ToNative(-4096), 0}, {0, Fixed32ToNative(4096), 0},
+			{0, 0, Fixed32ToNative(-4096)}, {0, 0, Fixed32ToNative(4096)} };
+		for (int i = 0; i < 6; ++i) {
+			if (dist == tSeries[i]) {
+				*normal = normals[i];
+				break;
+			}
+		}
+	}
+
 	return tNear <= tFar && tFar >= 0;
 #endif
 }
@@ -648,7 +876,7 @@ void RaycastQuadTreeSub(Vec3* point, Vec3* direction, f32 length, Vec3* AABBMin,
 	if (!block->subdivided) {
 		if (block->triCount > 0) {
 			if (AABBCheck(AABBMin, AABBMax, &block->boundsMin, &block->boundsMax)) {
-				if (RayOnAABB(point, direction, &block->boundsMin, &block->boundsMax, &t)) {
+				if (RayOnAABB(point, direction, &block->boundsMin, &block->boundsMax, NULL, &t)) {
 					if (t <= length) {
 						hitBlocks[*hitBlockPosition] = block;
 						*hitBlockPosition += 1;
@@ -741,7 +969,7 @@ bool RayOnMesh(Vec3* point, Vec3* direction, f32 length, Vec3* rayMin, Vec3* ray
 	Vec3 AABBMin, AABBMax;
 	Vec3Subtraction(&mesh->AABBPosition, &mesh->AABBBounds, &AABBMin);
 	Vec3Addition(&mesh->AABBPosition, &mesh->AABBBounds, &AABBMax);
-	if (RayOnAABB(&newPoint, &newDirection, &AABBMin, &AABBMax, &tempt)) {
+	if (RayOnAABB(&newPoint, &newDirection, &AABBMin, &AABBMax, NULL, &tempt)) {
 		if (tempt > newLength) {
 			return false;
 		}
@@ -836,4 +1064,86 @@ bool RayOnMesh(Vec3* point, Vec3* direction, f32 length, Vec3* rayMin, Vec3* ray
 	free(trisToCheck);
 	free(hitBlocks);
 	return everHit;
+}
+
+void ClosestPointAABB(Vec3* position, Vec3* boxMin, Vec3* boxMax, Vec3* out) {
+	*out = *position;
+
+	out->x = (out->x < boxMin->x) ? boxMin->x : out->x;
+	out->y = (out->y < boxMin->y) ? boxMin->y : out->y;
+	out->z = (out->z < boxMin->z) ? boxMin->z : out->z;
+
+	out->x = (out->x > boxMax->x) ? boxMax->x : out->x;
+	out->y = (out->y > boxMax->y) ? boxMax->y : out->y;
+	out->z = (out->z > boxMax->z) ? boxMax->z : out->z;
+}
+
+// essentially just sphere on AABB but applying inverse rotation to the sphere
+bool SphereOnOBB(CollisionSphere* sphere, CollisionBox* box, Vec3* hitPos, Vec3* normal, f32* t) {
+	Vec3 rotatedSpherePoint, workVec;
+	Vec3Subtraction(sphere->position, box->position, &workVec);
+	Quaternion invQuat;
+	QuaternionInverse(box->rotation, &invQuat);
+	QuatTimesVec3(&invQuat, &workVec, &rotatedSpherePoint);
+
+	// center around 0
+	Vec3 boxMin;
+	Vec3 zeroVec = { 0, 0, 0 };
+	Vec3Subtraction(&zeroVec, &box->extents, &boxMin);
+
+	Vec3 closestPoint;
+	ClosestPointAABB(&rotatedSpherePoint, &boxMin, &box->extents, &closestPoint);
+	Vec3 closestRelativeToSphere;
+	Vec3Subtraction(&rotatedSpherePoint, &closestPoint, &closestRelativeToSphere);
+	f32 sqrDist = SqrMagnitude(&closestRelativeToSphere);
+
+	if (sqrDist <= mulf32(sphere->radius, sphere->radius)) {
+		*hitPos = closestPoint;
+		if (sqrDist <= Fixed32ToNative(1)) {
+			// we're INSIDE the cube, fix!
+			Normalize(&rotatedSpherePoint, normal);
+
+			// gross i know but nothing better came to me
+			// 2867 = 0.7f
+			const f32 normalCheck = Fixed32ToNative(2867);
+			if (normal->y >= normalCheck) {
+				normal->x = 0;
+				normal->y = Fixed32ToNative(4096);
+				normal->z = 0;
+			} else if (normal->y <= -normalCheck) {
+				normal->x = 0;
+				normal->y = Fixed32ToNative(-4096);
+				normal->z = 0;
+			} else if (normal->x >= normalCheck) {
+				normal->x = Fixed32ToNative(4096);
+				normal->y = 0;
+				normal->z = 0;
+			} else if (normal->x <= -normalCheck) {
+				normal->y = 0;
+				normal->x = Fixed32ToNative(-4096);
+				normal->z = 0;
+			} else if (normal->z >= normalCheck) {
+				normal->x = 0;
+				normal->z = Fixed32ToNative(4096);
+				normal->y = 0;
+			}
+			else {
+				normal->x = 0;
+				normal->y = 0;
+				normal->z = Fixed32ToNative(-4096);
+			}
+			// this also sucks
+			*t = sphere->radius + f32abs(DotProduct(normal, &box->extents)) - DotProduct(normal, &rotatedSpherePoint);
+		}
+		else {
+			// we're outside of cube, return values
+			Normalize(&closestRelativeToSphere, normal);
+			*t = sphere->radius - sqrtf32(sqrDist);
+		}
+		Vec3 tmpNormal;
+		QuatTimesVec3(box->rotation, normal, &tmpNormal);
+		*normal = tmpNormal;
+		return true;
+	}
+	return false;
 }
