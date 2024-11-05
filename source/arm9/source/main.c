@@ -9,6 +9,7 @@
 #include "sdobject.h"
 #include "sddelta.h"
 #include "sdsound.h"
+#include "sdfile.h"
 #include "player.h"
 
 #ifdef _WIN32
@@ -98,7 +99,6 @@ int main() {
 	// set viewport to be size of screen
 	glViewport(0,0,255,191);
 
-	//consoleDemoInit();
 #endif
 
 #ifdef _WIN32
@@ -110,8 +110,8 @@ int main() {
 	InitializeAsyncFiles();
 
 	InitializeSubBG();
-
-	// be sure to set up lighting
+	
+		// be sure to set up lighting
 	SetLightColor(RGB15(16, 16, 16));
 	SetAmbientColor(RGB15(8, 8, 8));
 	SetLightDir(0, -4096, 0);
@@ -145,7 +145,7 @@ int main() {
 	deltaTimeEngine = true;
 
 	UpdateDeltaTime();
-
+	
 	PlayMusic("nitro:/music/battle.wav", 0);
 
 	while (1) {
@@ -158,6 +158,7 @@ int main() {
 
 		// flush screen
 #ifndef _NOTDS
+		// this handles glFlush(0) and swiWaitForVBlank() for us!
 		AsyncFileHandler();
 		glClearDepth(GL_MAX_DEPTH); // reset depth buffer, good idea to set to GL_MAX_DEPTH
 		UpdateMusicBuffer();
