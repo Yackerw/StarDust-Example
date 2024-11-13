@@ -2,11 +2,7 @@
 #define SDMATH
 #include <nds.h>
 
-#ifndef _NOTDS
 typedef int f32;
-#else
-typedef float f32;
-#endif
 
 typedef struct {
 	f32 x;
@@ -30,6 +26,30 @@ typedef struct {
 typedef struct {
 	union {
 		struct {
+			float x;
+			float y;
+			float z;
+			float w;
+		};
+		float coords[4];
+	};
+} Vec4f;
+
+typedef struct {
+	union {
+		struct {
+			short x;
+			short y;
+			short z;
+			short w;
+		};
+		short coords[4];
+	};
+} Vec4s;
+
+typedef struct {
+	union {
+		struct {
 			f32 x;
 			f32 y;
 			f32 z;
@@ -37,6 +57,38 @@ typedef struct {
 		f32 coords[3];
 	};
 } Vec3;
+
+typedef struct {
+	union {
+		struct {
+			short x;
+			short y;
+			short z;
+		};
+		short coords[3];
+	};
+} Vec3s;
+
+typedef struct {
+	union {
+		struct {
+			float x;
+			float y;
+			float z;
+		};
+		float coords[3];
+	};
+} Vec3f;
+
+typedef struct {
+	union {
+		struct {
+			float x;
+			float y;
+		};
+		float coords[2];
+	};
+} Vec2f;
 
 typedef struct {
 	union {
@@ -59,23 +111,10 @@ typedef struct {
 	Vec4 planes[6];
 } ViewFrustum;
 
-#ifndef _NOTDS
 #define PI 12868
 #define FixedDegreesToRotation 91
 #define FixedRadiansToRotation 5215
 #define RotationToFixedRadians 3217
-#define Fixed32ToNative(x) (x)
-#define Angle16ToNative(x) (x)
-#define NativeToFixed32(x) (x)
-#else
-#define PI 3.14159265359f
-#define FixedDegreesToRotation 0.0174533f
-#define FixedRadiansToRotation 1.0f
-#define RotationToFixedRadians 1.0f
-#define Fixed32ToNative(x) (f32)((x) / 4096.0f)
-#define Angle16ToNative(x) (f32)((x) / 32767.0f * PI * 2.0f)
-#define NativeToFixed32(x) (int)(4096.0f * (x))
-#endif
 
 void MakeTranslationMatrix(f32 x, f32 y, f32 z, m4x4 *retValue);
 
@@ -145,9 +184,9 @@ inline f32 DeltaAngle(f32 dir1, f32 dir2);
 
 f32 Pow(f32 value, f32 toPow);
 
-void NormalFromVerts(Vec3 *vert1, Vec3 *vert2, Vec3 *vert3, Vec3 *out);
+void NormalFromVerts(Vec3s *vert1, Vec3s *vert2, Vec3s *vert3, Vec3s *out);
 
-void NormalFromVertsFloat(Vec3* vert1, Vec3* vert2, Vec3* vert3, Vec3* out);
+void NormalFromVertsFloat(Vec3s* vert1, Vec3s* vert2, Vec3s* vert3, Vec3s* out);
 
 void MakePerspectiveMatrix(f32 fov, f32 aspect, f32 near, f32 far, m4x4* ret);
 
@@ -163,8 +202,6 @@ void QuaternionToEuler(Quaternion* quat, Vec3* euler);
 
 f32 f32rand(f32 min, f32 max);
 
-#ifndef _NOTDS
 long long Int64Div(int left, int right);
-#endif
 
 #endif

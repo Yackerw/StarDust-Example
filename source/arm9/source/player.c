@@ -20,13 +20,13 @@ void PlayerStart(Object* obj) {
 	// spherecol gives us a sphere collider for our object to collide with the world with
 	obj->sphereCol = calloc(sizeof(CollisionSphere), 1);
 	obj->sphereCol->position = &obj->position;
-	obj->sphereCol->radius = Fixed32ToNative(2048);
+	obj->sphereCol->radius = 2048;
 	// layer indicates the collision layer it's on, for now we'll just place the player on layer 2 and the world on layer 1 for organizational purposes
 	obj->layer = 2;
 	// scale impacts mesh rendering size and mesh collider size. it does NOT impact other colliders
-	obj->scale.x = Fixed32ToNative(250);
-	obj->scale.y = Fixed32ToNative(250);
-	obj->scale.z = Fixed32ToNative(250);
+	obj->scale.x = 250;
+	obj->scale.y = 250;
+	obj->scale.z = 250;
 	// solid is necessary for collision checks to be ran, moves is necessary for it to be able to conduct collision checks while moving
 	obj->solid = true;
 	obj->moves = true;
@@ -38,10 +38,10 @@ void PlayerUpdate(Object* obj) {
 	PlayerValues* pv = obj->data;
 	u16 keys = keysHeld();
 	Vec3 moveAxis;
-	moveAxis.x = ((keys & KEY_RIGHT) != 0) * Fixed32ToNative(4096);
-	moveAxis.x += ((keys & KEY_LEFT) != 0) * -Fixed32ToNative(4096);
-	moveAxis.z = ((keys & KEY_UP) != 0) * -Fixed32ToNative(4096);
-	moveAxis.z += ((keys & KEY_DOWN) != 0) * Fixed32ToNative(4096);
+	moveAxis.x = ((keys & KEY_RIGHT) != 0) * 4096;
+	moveAxis.x += ((keys & KEY_LEFT) != 0) * -4096;
+	moveAxis.z = ((keys & KEY_UP) != 0) * -4096;
+	moveAxis.z += ((keys & KEY_DOWN) != 0) * 4096;
 	moveAxis.y = 0;
 	if (moveAxis.x != 0 || moveAxis.z != 0) {
 		Normalize(&moveAxis, &moveAxis);
@@ -53,30 +53,30 @@ void PlayerUpdate(Object* obj) {
 
 	if (keysDown() & KEY_A && pv->onGround) {
 		pv->onGround = false;
-		pv->vSpeed = Fixed32ToNative(14 * 4096);
+		pv->vSpeed = 14 * 4096;
 
 		SoundData *sd = malloc(sizeof(SoundData));
-		sd->volume = Fixed32ToNative(2048);
+		sd->volume = 2048;
 		sd->loop = false;
 		// 0 for left, 0.5 for middle, 1 for right
-		sd->pan = Fixed32ToNative(2048);
-		sd->pitch = Fixed32ToNative(4096);
+		sd->pan = 2048;
+		sd->pitch = 4096;
 		sd->sound = jumpSound;
 		PlaySound(sd);
 		free(sd);
 	}
 	
 	// set speed
-	obj->velocity.x = mulf32(tmpMoveAxis.x, Fixed32ToNative(4096 * 7));
-	obj->velocity.z = mulf32(tmpMoveAxis.z, Fixed32ToNative(4096 * 7));
+	obj->velocity.x = mulf32(tmpMoveAxis.x, 4096 * 7);
+	obj->velocity.z = mulf32(tmpMoveAxis.z, 4096 * 7);
 	if (pv->onGround) {
 		obj->velocity.y = 0;
-		Vec3 newDown = { mulf32(-pv->normal.x, Fixed32ToNative(4096 * 7)), mulf32(-pv->normal.y, Fixed32ToNative(4096 * 7)), mulf32(-pv->normal.z, Fixed32ToNative(4096 * 7)) };
+		Vec3 newDown = { mulf32(-pv->normal.x, 4096 * 7), mulf32(-pv->normal.y, 4096 * 7), mulf32(-pv->normal.z, 4096 * 7) };
 		Vec3Addition(&newDown, &obj->velocity, &obj->velocity);;
 		pv->vSpeed = 0;
 	}
 	else {
-		pv->vSpeed = Max(pv->vSpeed - mulf32(Fixed32ToNative(4096 * 14), deltaTime), -Fixed32ToNative(20 * 4096));
+		pv->vSpeed = Max(pv->vSpeed - mulf32(4096 * 14, deltaTime), -20 * 4096);
 		obj->velocity.y = pv->vSpeed;
 	}
 
@@ -88,19 +88,19 @@ void PlayerUpdate(Object* obj) {
 	if (pv->onGround) {
 		if (magnitude == 0 && obj->animator->currAnimation != idleAnim) {
 			// animator lerp time is in frames, assuming a 60 fps game. IT IS DELTA TIMED!! 60 lerp time will always equal 1 second of lerp time
-			PlayAnimation(obj->animator, idleAnim, Fixed32ToNative(7 * 4096));
+			PlayAnimation(obj->animator, idleAnim, 7 * 4096);
 		}
 		if (magnitude != 0 && obj->animator->currAnimation != walkAnim) {
-			PlayAnimation(obj->animator, walkAnim, Fixed32ToNative(7 * 4096));
+			PlayAnimation(obj->animator, walkAnim, 7 * 4096);
 		}
 
 	}
 	else {
 		if (pv->vSpeed > 0 && obj->animator->currAnimation != jumpUpAnim) {
-			PlayAnimation(obj->animator, jumpUpAnim, Fixed32ToNative(7 * 4096));
+			PlayAnimation(obj->animator, jumpUpAnim, 7 * 4096);
 		}
 		if (pv->vSpeed < 0 && obj->animator->currAnimation != jumpDownAnim) {
-			PlayAnimation(obj->animator, jumpDownAnim, Fixed32ToNative(7 * 4096));
+			PlayAnimation(obj->animator, jumpDownAnim, 7 * 4096);
 		}
 	}
 
@@ -113,16 +113,16 @@ void PlayerLateUpdate(Object* obj) {
 	u16 keys = keysHeld();
 	if (keys & KEY_R) {
 		// FixedDegreesToRotation can be multiplied by to convert from 0-360*4096 degree fixed point to 0-32767 fixed point angles used by trigonometric functions
-		pv->cameraAngle -= mulf32(mulf32(Fixed32ToNative(4096 * 110), deltaTime), FixedDegreesToRotation);
+		pv->cameraAngle -= mulf32(mulf32(4096 * 110, deltaTime), FixedDegreesToRotation);
 	}
 	else if (keys & KEY_L) {
-		pv->cameraAngle += mulf32(mulf32(Fixed32ToNative(4096 * 110), deltaTime), FixedDegreesToRotation);
+		pv->cameraAngle += mulf32(mulf32(4096 * 110, deltaTime), FixedDegreesToRotation);
 	}
-	pv->cameraAngle = f32Mod(pv->cameraAngle, mulf32(Fixed32ToNative(4096 * 360), FixedDegreesToRotation));
+	pv->cameraAngle = f32Mod(pv->cameraAngle, mulf32(4096 * 360, FixedDegreesToRotation));
 
 	// cameraRotation is the rotation of the camera, cameraPosition is the cameras position
 	EulerToQuat(0, pv->cameraAngle, 0, &cameraRotation);
-	Vec3 back = { 0, Fixed32ToNative(1 * 4096), Fixed32ToNative(3 * 4096) };
+	Vec3 back = { 0, 1 * 4096, 3 * 4096 };
 	QuatTimesVec3(&cameraRotation, &back, &cameraPosition);
 	Vec3Addition(&cameraPosition, &obj->position, &cameraPosition);
 }
@@ -136,8 +136,8 @@ void PlayerDestroy(Object* obj) {
 
 bool PlayerCollide(Object* obj, CollisionHit* hitInfo) {
 	PlayerValues* pv = obj->data;
-	Vec3 up = { 0, Fixed32ToNative(4096), 0 };
-	if (DotProduct(&up, &hitInfo->normal) >= Fixed32ToNative(2048) && pv->vSpeed <= 0) {
+	Vec3 up = { 0, 4096, 0 };
+	if (DotProduct(&up, &hitInfo->normal) >= 2048 && pv->vSpeed <= 0) {
 		pv->normal = hitInfo->normal;
 		pv->onGround = true;
 	}

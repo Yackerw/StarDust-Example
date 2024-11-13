@@ -134,10 +134,8 @@ int main() {
 	world->scale.z = world->mesh->defaultScale;
 	world->position = world->mesh->defaultOffset;
 	world->solid = true;
-	world->dirtyTransform = true;
 
-	// Fixed32ToNative will convert fixed values to floats on PC. 4096 = 1.0f
-	Vec3 up = { 0, Fixed32ToNative(4096), 0 };
+	Vec3 up = { 0, 4096, 0 };
 
 	Object* player = CreateObject(playerId, &up, false);
 	
