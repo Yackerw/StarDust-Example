@@ -68,15 +68,13 @@ int main() {
 #endif
 
 	Initialize3D(true, true);
-	MultipassTargetRect mtr = { 0 };
-	SetMultipassType(MULTIPASS_LEFTRIGHT, 0, mtr, mtr);
 
 	// set 3D to top screen
 	Set3DOnTop();
 
 	InitializeNetworking(1, 1);
 
-	//InitializeSubBG();
+	InitializeSubBG();
 	
 		// be sure to set up lighting
 	SetLightColor(RGB15(16, 16, 16));
@@ -120,7 +118,7 @@ int main() {
 		
 		ProcessObjects();
 
-		FinalizeSprites();
+		//FinalizeSprites();
 
 		//printf("%i\n%i\n", GetTouchScreenX(TOUCH_ORIGIN_LEFT), GetTouchScreenY(TOUCH_ORIGIN_TOP));
 #ifdef _WIN32

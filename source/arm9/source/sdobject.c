@@ -549,141 +549,66 @@ void ProcessObjects() {
 		UpdateMusicBuffer();
 	}
 	else {
-		switch (multipassType) {
-		case MULTIPASS_MANUAL:
-
-			break;
-		//case MULTIPASS_DISTANCE:
-
-			//break;
-		case MULTIPASS_LEFTRIGHT:
-			// we have to start by rendering the left half, then the right half
-			SetupCameraMatrixPartial(0, 0, 128, 192);
-			int targetBank = 3;
-			int renderBank = 1;
-			/*if (multipassSecondaryBank) {
-				targetBank = 1;
-				renderBank = 3;
-			}*/
-			// this is kinda awkward, but registers seem to take one glFlush() to update? so...lets do the *incredibly* awkward thing of flushing BEFORE we render, so the previous frame finally presents, but with the right settings.
-			/*if (multipassSecondaryBank) {
-				vramSetBankD(VRAM_D_LCD);
-				vramSetBankB(VRAM_B_MAIN_BG_0x06000000);
-			}
-			else {
-				vramSetBankB(VRAM_B_LCD);
-				vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
-			}*/
-			// set up the backgrounds
-			//bgInit(3, BgType_Bmp16, BgSize_B16_256x256, 0, 0);
-			//bgSetPriority(3, 0);
-			//bgSetPriority(0, 3);
-			//vramSetBankD(VRAM_D_LCD);
-			//glFlush(0);
-			//threadWaitForVBlank();
-
-			// store to VRAM bank (targetBank), capture 256x192 pixels, capture only 3d output, and enable capture
-			REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (1 << 31); // this works for 2 frames...
-			// change the display to display from VRAM, bank B or D depending
-			REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (renderBank << 18) | 3 | (1 << 8) | (1 << 11);
-
-			// we must now steal the saved image!
-			//RestoreLCD();
-			// okay, now we render twice regularly
-			for (int i = 0; i < 2; ++i) {
-				currObject = firstObject.next;
-				while (currObject != NULL) {
-					if (currObject->mesh != NULL && !currObject->culled) {
-						if (currObject->mesh->skeletonCount != 0 && currObject->animator != NULL) {
-							RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator);
-						}
-						else {
-							RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL);
-						}
-					}
-					currObject = currObject->next;
-				}
-				if (i == 2) {
-					// sprites, done!
-					FinalizeSprites();
-					bgUpdate();
-				}
-				// update music
-				//UpdateMusicBuffer();
-				if (i == 2) {
-					// capture...!
-					//glFlush(0);
-					// relinquish some control...
-					//threadWaitForVBlank();
-					//REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (1 << 31);
-				}
-				glFlush(0);
-				threadWaitForVBlank();
-				if (i == 0) {
-					REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (1 << 31); // applies to next *rendered* frame; i.e. 2 glflush from now, the next glflush gets rendered
-// change the display to display from VRAM, bank B or D depending
-					REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (renderBank << 18) | 3 | (1 << 8) | (1 << 11);
-					SetupCameraMatrixPartial(128, 0, 128, 192); // applies to next glflush
-				}
-				if (i == 1) {
-					// set up the new DISPCAPCNT to capture and render final!
-					// store to VRAM bank x, capture 256x192 pixels, capture 3D output, enable mix, set mixA to 31, set mixB to 31, and enable capture
-					//REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (2 << 29) | (0x1F << 0) | (0x1F << 8) | (1 << 31);
-					// change the display to display video, selecting VRAM target for capture mixing
-					//REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
-					// set up the new display...
-					//SetupCameraMatrixPartial(128, 0, 128, 192);
-					/*if (multipassSecondaryBank) {
-						vramSetBankD(VRAM_D_LCD);
-						vramSetBankB(VRAM_B_MAIN_BG_0x06000000);
+		// we have to start by rendering the left half, then the right half
+		SetupCameraMatrixPartial(0, 0, 128, 192);
+		int targetBank = 3;
+		int renderBank = 1;
+		if (multipassSecondaryBank) {
+			targetBank = 1;
+			renderBank = 3;
+		}
+		// okay, now we render twice regularly
+		for (int i = 0; i < 2; ++i) {
+			currObject = firstObject.next;
+			while (currObject != NULL) {
+				if (currObject->mesh != NULL && !currObject->culled) {
+					if (currObject->mesh->skeletonCount != 0 && currObject->animator != NULL) {
+						RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator);
 					}
 					else {
-						vramSetBankB(VRAM_B_LCD);
-						vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
-					}*/
-					//bgInit(3, BgType_Bmp16, BgSize_B16_256x256, 0, 0);
-					//bgSetPriority(3, 0);
-					//bgSetPriority(0, 3);
-					// capture...!
-					//glFlush(0);
-					// relinquish some control...
-					//threadWaitForVBlank();
-					REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (2 << 29) | (0x1F << 0) | (0x1F << 8) | (1 << 31); // but this only works for 1 frame??
-					// change the display to display video, selecting VRAM target for capture mixing
-					REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
+						RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL);
+					}
 				}
+				currObject = currObject->next;
 			}
-			// reset display control to normal
-			//REG_DISPCNT = tempDISPCNT;
-			//REG_DISPCAPCNT = 0;
-			multipassSecondaryBank = !multipassSecondaryBank;
 			glFlush(0);
 			threadWaitForVBlank();
-			REG_DISPCAPCNT = (renderBank << 16) | (3 << 20) | (1 << 24) | (2 << 29) | (0x1F << 0) | (0x1F << 8) | (1 << 31);
-			// change the display to display video, selecting VRAM target for capture mixing
-			REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (renderBank << 18) | 3 | (1 << 8) | (1 << 11);
-			vramSetBankD(VRAM_D_MAIN_BG_0x06000000); // glflush 3 has passed, we can now change the bank. this means we can't change the bank until the render is *done*; it must happen a glflush late.
-			// so, we have to:
-			// set both to LCD, present previous, render frame, glflush. then, set previous to background, render frame, glflush.
-			glFlush(0);
-			threadWaitForVBlank();
-			REG_DISPCAPCNT = 0;
-			//glFlush(0);
-			//threadWaitForVBlank();
-			//SaveLCD();
-			REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18))) | (1 << 16) | (0 << 18) | 3 | (1 << 8) | (1 << 11);
-			vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
-			bgInit(3, BgType_Bmp16, BgSize_B16_256x256, 0, 0);
-			bgSetPriority(3, 0);
-			bgSetPriority(0, 3);
-			bgUpdate();
-			while (true) {
-				//glFlush(0);
-				threadWaitForVBlank();
-				//RestoreLCD();
+			// update music
+			UpdateMusicBuffer();
+			if (i == 0) {
+				REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (1 << 31); // applies to next *rendered* frame; i.e. 2 glflush from now, the next glflush gets rendered. so we have to
+				// backtrack in time and use the settings for the previous frame
+				// change the display to display from VRAM, bank B or D depending
+				REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (2 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
+				SetupCameraMatrixPartial(128, 0, 128, 192); // applies to next glflush
+				bgSetPriority(3, 3); // next rendered frame; shouldn't matter since we display from vram, but i'll leave it documented here for the next part
+				bgSetPriority(0, 0);
+				vramSetBankD(VRAM_D_LCD); // next rendered frame
+				vramSetBankB(VRAM_B_LCD);
 			}
-			break;
+			if (i == 1) {
+				// set up the new DISPCAPCNT to capture and render final!
+				// store to VRAM bank x, capture 256x192 pixels, capture 3D output, enable mix, set mixA to 31, set mixB to 31, and enable capture
+				REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (2 << 29) | (0x1F << 0) | (0x1F << 8) | (1 << 31);
+				// change the display to display video, selecting VRAM target for capture mixing
+				REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
+				// applies to next *rendered* frame; i.e. frame we just set up to be rendered
+				if (multipassSecondaryBank) {
+					vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
+				}
+				else {
+					vramSetBankB(VRAM_B_MAIN_BG_0x06000000);
+				}
+				// set up bg to render over us
+				bgInit(3, BgType_Bmp16, BgSize_B16_256x256, 0, 0);
+				bgSetPriority(3, 0);
+				bgSetPriority(0, 3);
+				// sprites, done!
+				FinalizeSprites();
+				bgUpdate();
+			}
 		}
+		multipassSecondaryBank = !multipassSecondaryBank;
 	}
 
 	glClearDepth(GL_MAX_DEPTH); // reset depth buffer, good idea to set to GL_MAX_DEPTH

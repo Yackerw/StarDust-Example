@@ -44,8 +44,6 @@ Vec3 cameraRecentering;
 bool touch3D = false;
 
 bool multipassRendering = false;
-int multipassType;
-f32 multipassDistance;
 
 #ifdef _WIN32
 Shader *defaultShader;
@@ -2431,8 +2429,26 @@ void InitializeSubBG() {
 #endif
 }
 
+#ifndef _NOTDS
+unsigned int spriteNativeResolutions[] = {
+	SpriteSize_8x8,
+	SpriteSize_16x16,
+	SpriteSize_32x32,
+	SpriteSize_64x64,
+	SpriteSize_16x8,
+	SpriteSize_32x8,
+	SpriteSize_32x16,
+	SpriteSize_64x32,
+	SpriteSize_8x16,
+	SpriteSize_8x32,
+	SpriteSize_16x32,
+	SpriteSize_32x64
+};
+#endif
+
 void UploadSprite(Sprite* input, bool sub, bool BG) {
 #ifndef _NOTDS
+	input->DSResolution = spriteNativeResolutions[(int)input->resolution];
 	input->gfx = (char*)oamAllocateGfx(sub ? &oamSub : &oamMain, input->DSResolution, input->format);
 	float multiplier = input->format == 1 ? 0.5f : input->format == 2 ? 1.0f : 2.0f;
 	dmaCopy(input->image, input->gfx, multiplier * (input->width * input->height));
@@ -3212,11 +3228,7 @@ void Initialize3D(bool multipass, bool subBGFull) {
 	multipassRendering = multipass;
 }
 
-void SetMultipassType(int type, f32 distance, MultipassTargetRect manualFirstPassRect, MultipassTargetRect manualSecondPassRect) {
-	multipassType = type;
-	multipassDistance = distance;
-}
-
+// functions only used for debugging multipass...
 void SaveLCD() {
 #ifndef _NOTDS
 	// dma copying from the LCD storage to our temporary texture for multipass
