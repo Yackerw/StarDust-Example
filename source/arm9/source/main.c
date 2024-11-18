@@ -68,7 +68,7 @@ int main() {
 	WindowsInitialization();
 #endif
 
-	Initialize3D(true, true);
+	Initialize3D(false, true);
 
 	// set 3D to top screen
 	Set3DOnTop();
