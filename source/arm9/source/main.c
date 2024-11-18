@@ -57,6 +57,7 @@ int main() {
 	InitSound();
 #ifndef _NOTDS
 	
+	defaultExceptionHandler();
 	if (!nitroFSInit(NULL)) {
 		printf("NitroFSInit failure");
 	}
@@ -76,7 +77,7 @@ int main() {
 
 	InitializeSubBG();
 	
-		// be sure to set up lighting
+	// be sure to set up lighting
 	SetLightColor(RGB15(16, 16, 16));
 	SetAmbientColor(RGB15(8, 8, 8));
 	SetLightDir(0, -4096, 0);

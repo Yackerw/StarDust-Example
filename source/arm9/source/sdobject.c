@@ -552,10 +552,8 @@ void ProcessObjects() {
 		// we have to start by rendering the left half, then the right half
 		SetupCameraMatrixPartial(0, 0, 128, 192);
 		int targetBank = 3;
-		int renderBank = 1;
 		if (multipassSecondaryBank) {
 			targetBank = 1;
-			renderBank = 3;
 		}
 		// okay, now we render twice regularly
 		for (int i = 0; i < 2; ++i) {
