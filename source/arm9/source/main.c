@@ -10,6 +10,7 @@
 #include "sddelta.h"
 #include "sdsound.h"
 #include "sdfile.h"
+#include "sdinput.h"
 #include "player.h"
 
 #ifdef _WIN32
@@ -32,24 +33,6 @@ char* LoadShaderInclude(char* includePath) {
 	return retValue;
 }
 
-
-u16 WindowsInputCallback() {
-	u16 retValue = 0;
-	retValue |= GetKey("Z"[0]);
-	retValue |= GetKey("X"[0]) << 1;
-	retValue |= GetKey(KEYB_ENTER) << 2;
-	retValue |= GetKey(KEYB_RSHIFT) << 3;
-	retValue |= GetKey(KEYB_RIGHT) << 4;
-	retValue |= GetKey(KEYB_LEFT) << 5;
-	retValue |= GetKey(KEYB_UP) << 6;
-	retValue |= GetKey(KEYB_DOWN) << 7;
-	retValue |= GetKey("W"[0]) << 8;
-	retValue |= GetKey("Q"[0]) << 9;
-	retValue |= GetKey("C"[0]) << 10;
-	retValue |= GetKey("V"[0]) << 11;
-	return retValue;
-}
-
 void WindowsInitialization() {
 	shaderIncludeCallback = LoadShaderInclude;
 	InitializeGraphics();
@@ -57,47 +40,26 @@ void WindowsInitialization() {
 	defaultShader = LoadShader("shaders/default.vert", "shaders/default.frag");
 	defaultRiggedShader = LoadShader("shaders/defaultRigged.vert", "shaders/default.frag");
 	defaultSpriteShader = LoadShader("shaders/defaultSprite.vert", "shaders/defaultSprite.frag");
-	keysCallback = WindowsInputCallback;
 }
 
 #endif
 
+FILE* testfile;
+
+void AsyncReadTestCallback(void* data, bool success) {
+	//if (data == NULL) return;
+	fseek(testfile, 0, SEEK_SET);
+	// i think it's being read in 0 time...
+	fread_Async(data, 0x100000, 1, testfile, 0, AsyncReadTestCallback, data);
+}
+
 int main() {
 	InitSound();
-	// set top screen for 3d
 #ifndef _NOTDS
-	videoSetMode(MODE_0_3D);
-	videoSetModeSub(MODE_0_2D);
-	// initialize gl engine
-	glInit();
 	
-	// AA because why not
-	glEnable(GL_ANTIALIAS);
-	
-	glEnable(GL_TEXTURE_2D);
-	
-	glEnable(GL_BLEND);
-	
-	vramSetBankA(VRAM_A_TEXTURE);
-	vramSetBankB(VRAM_B_TEXTURE);
-	vramSetBankC(VRAM_C_SUB_BG);
-	vramSetBankD(VRAM_D_TEXTURE_SLOT2);
-	vramSetBankE(VRAM_E_MAIN_SPRITE);
-	vramSetBankF(VRAM_F_TEX_PALETTE_SLOT0);
-	vramSetBankG(VRAM_G_TEX_PALETTE_SLOT5);
-	//vramSetBankH(VRAM_H_SUB_BG);
-	vramSetBankI(VRAM_I_SUB_SPRITE);
-	glMaterialShinyness();
-	oamInit(&oamMain, SpriteMapping_Bmp_1D_128, false);
-	oamInit(&oamSub, SpriteMapping_Bmp_1D_128, false);
-	
-	defaultExceptionHandler();
 	if (!nitroFSInit(NULL)) {
 		printf("NitroFSInit failure");
 	}
-	
-	// set viewport to be size of screen
-	glViewport(0,0,255,191);
 
 #endif
 
@@ -105,11 +67,16 @@ int main() {
 	WindowsInitialization();
 #endif
 
+	Initialize3D(true, true);
+	MultipassTargetRect mtr = { 0 };
+	SetMultipassType(MULTIPASS_LEFTRIGHT, 0, mtr, mtr);
+
+	// set 3D to top screen
+	Set3DOnTop();
+
 	InitializeNetworking(1, 1);
 
-	InitializeAsyncFiles();
-
-	InitializeSubBG();
+	//InitializeSubBG();
 	
 		// be sure to set up lighting
 	SetLightColor(RGB15(16, 16, 16));
@@ -148,29 +115,18 @@ int main() {
 
 	while (1) {
 		UpdateDeltaTime();
-		scanKeys();
+		printf("%f\n", f32tofloat(deltaTime));
+		UpdateInput();
 		
 		ProcessObjects();
 
 		FinalizeSprites();
 
-		// flush screen
-#ifndef _NOTDS
-		// this handles glFlush(0) and swiWaitForVBlank() for us!
-		AsyncFileHandler();
-		glClearDepth(GL_MAX_DEPTH); // reset depth buffer, good idea to set to GL_MAX_DEPTH
-		UpdateMusicBuffer();
-		oamUpdate(&oamMain);
-		oamUpdate(&oamSub);
-		bgUpdate();
-#endif
+		//printf("%i\n%i\n", GetTouchScreenX(TOUCH_ORIGIN_LEFT), GetTouchScreenY(TOUCH_ORIGIN_TOP));
 #ifdef _WIN32
-		PollWindowEvents();
 		if (GetWindowClosing()) {
 			break;
 		}
-		SwapWindowBuffers();
-		UpdateViewport(GetWindowWidth(), GetWindowHeight());
 #endif
 	}
 #ifdef _WIN32

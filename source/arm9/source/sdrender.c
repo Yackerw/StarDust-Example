@@ -39,6 +39,14 @@ ModelDrawCall* modelDrawCalls;
 int modelDrawCallCount;
 int modelDrawCallAllocated;
 
+Vec3 cameraRecentering;
+
+bool touch3D = false;
+
+bool multipassRendering = false;
+int multipassType;
+f32 multipassDistance;
+
 #ifdef _WIN32
 Shader *defaultShader;
 Shader *defaultRiggedShader;
@@ -294,7 +302,7 @@ int LoadModelAsync(char* input, void (*callBack)(void* data, Model* model), void
 	cbd->texDir = malloc(strlen(input) + 1);
 	strcpy(cbd->texDir, input);
 
-	return fread_Async((void*)retValue, fsize, 1, f, LoadModelAsyncCallback, cbd);
+	return fread_Async((void*)retValue, fsize, 1, f, 0, LoadModelAsyncCallback, cbd);
 }
 
 void LoadTextureFromQueue();
@@ -326,7 +334,7 @@ void TextureAsyncCallback(void* data, bool success) {
 	}
 
 	// okay, we're good, initialize the texture properly
-	LoadTextureFromRAM(tq->tex, tq->upload, tq->textureToLoad);
+	tq->tex = LoadTextureFromRAM(tq->tex, tq->upload, tq->textureToLoad);
 
 	tq->callBack(tq->callBackData, tq->tex);
 	UpdateTextureQueue();
@@ -354,7 +362,7 @@ void LoadTextureFromQueue() {
 	Texture* newTex = (Texture*)malloc(fsize);
 	firstTextureQueue->f = f;
 	firstTextureQueue->tex = newTex;
-	fread_Async(newTex, fsize, 1, f, TextureAsyncCallback, firstTextureQueue);
+	fread_Async(newTex, fsize, 1, f, 0, TextureAsyncCallback, firstTextureQueue);
 }
 
 void LoadTextureAsync(char* input, bool upload, void (*callBack)(void* data, Texture* texture), void* callBackData) {
@@ -442,7 +450,6 @@ void CacheRiggedModel(Model* reference) {
 		if (NOPCount != 0) {
 			FIFOCount += 1;
 		}
-		int FIFOIterator = FIFOCount;
 		// agghh
 		FIFOCount += FIFOCountLaterAddition + vertCount * 4 + 1;
 		// now generate FIFO batch
@@ -965,8 +972,14 @@ void SetupMaterial(SDMaterial* mat, bool rigged) {
 	Texture* currTex = mat->texture;
 	//glBindTexture(0, currTex->textureId);
 	//glAssignColorTable(0, currTex->paletteId);
-	GFX_TEX_FORMAT = currTex->textureWrite; // this is a minor optimization, but glBindTexture and glAssignColorTable accounted for about half the call time for material setup, and material setup needs to be called a lot.
-	GFX_PAL_FORMAT = currTex->paletteWrite;
+	if (currTex != NULL) {
+		GFX_TEX_FORMAT = currTex->textureWrite; // this is a minor optimization, but glBindTexture and glAssignColorTable accounted for about half the call time for material setup, and material setup needs to be called a lot.
+		GFX_PAL_FORMAT = currTex->paletteWrite;
+	}
+	else {
+		GFX_TEX_FORMAT = 0;
+		GFX_PAL_FORMAT = 0;
+	}
 }
 
 void GetMatrixLengths(m4x4* input, Vec3* output) {
@@ -994,6 +1007,7 @@ void GetMatrixLengths(m4x4* input, Vec3* output) {
 }
 
 void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quaternion *rotation, SDMaterial *mats, Animator *animator) {
+	//threadSleep(1000000);
 	// set current matrix to be model matrix
 	glMatrixMode(GL_MODELVIEW);
 	// ensure materials are valid...
@@ -1001,6 +1015,7 @@ void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quaternion *ro
 	if (mats == NULL) {
 		mats = model->defaultMats;
 	}
+	while (GFX_STATUS & (1 << 14));
 	// a little silly, but lets push until the end of the matrix, then store our base matrix in the last bone we would use.
 	const int lastBone = Min(31, model->skeletonCount) - 1;
 	for (int i = 0; i <= lastBone; ++i) {
@@ -1010,9 +1025,9 @@ void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quaternion *ro
 	m4x4 rotationMatrix;
 	m4x4 rotationMatrixPrepared;
 	MakeRotationMatrix(rotation, &rotationMatrix);
-	rotationMatrix.m[3] = position->x;
-	rotationMatrix.m[7] = position->y;
-	rotationMatrix.m[11] = position->z;
+	rotationMatrix.m[3] = position->x - cameraRecentering.x;
+	rotationMatrix.m[7] = position->y - cameraRecentering.y;
+	rotationMatrix.m[11] = position->z - cameraRecentering.z;
 	MatrixToDSMatrix(&rotationMatrix, &rotationMatrixPrepared);
 	glLoadMatrix4x4(&rotationMatrixPrepared);
 	glScalef32(scale->x, scale->y, scale->z);
@@ -1020,6 +1035,12 @@ void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quaternion *ro
 
 	// hardware AABB test
 	if (!BoxTest(model->boundsMin.x, model->boundsMin.y, model->boundsMin.z, model->boundsMax.x - model->boundsMin.x, model->boundsMax.y - model->boundsMin.y, model->boundsMax.z - model->boundsMin.z)) {
+		if (31 > model->skeletonCount) {
+			glPopMatrix(model->skeletonCount);
+		}
+		else {
+			glPopMatrix(31);
+		}
 		return;
 	}
 
@@ -1050,12 +1071,14 @@ void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quaternion *ro
 		glMultMatrix4x4(&animator->items[i].matrix);
 		glStoreMatrix(i);
 	}
-	for (int i = 0; i < lastBone + 1; ++i) {
+
+	for (int i = 0; i <= lastBone; ++i) {
 		// apply inverse matrices now
 		glRestoreMatrix(i);
 		glMultMatrix4x4(&model->skeleton[i].inverseMatrix);
 		glStoreMatrix(i);
 	}
+
 	// if a mesh has > 31 bones, then we need to set up the basic matrix too
 	m4x4 matrix;
 	if (model->skeletonCount > 31) {
@@ -1143,7 +1166,6 @@ void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quaternion *ro
 			}
 		}
 	}
-	glPopMatrix(1);
 	if (31 > model->skeletonCount) {
 		glPopMatrix(model->skeletonCount);
 	} else {
@@ -1161,9 +1183,9 @@ void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion *rotation
 	m4x4 rotationMatrix;
 	m4x4 rotationMatrixPrepared;
 	MakeRotationMatrix(rotation, &rotationMatrix);
-	rotationMatrix.m[3] = position->x;
-	rotationMatrix.m[7] = position->y;
-	rotationMatrix.m[11] = position->z;
+	rotationMatrix.m[3] = position->x - cameraRecentering.x;
+	rotationMatrix.m[7] = position->y - cameraRecentering.y;
+	rotationMatrix.m[11] = position->z - cameraRecentering.z;
 	MatrixToDSMatrix(&rotationMatrix, &rotationMatrixPrepared);
 	glLoadMatrix4x4(&rotationMatrixPrepared);
 	glScalef32(scale->x, scale->y, scale->z);
@@ -1301,7 +1323,7 @@ void UploadTexture(Texture* input) {
 	input->paletteWrite = ((gl_palette_data*)DynamicArrayGet( &glGlob->palettePtrs, tex->palIndex ))->addr;
 }
 
-void LoadTextureFromRAM(Texture* newTex, bool upload, char* name) {
+Texture *LoadTextureFromRAM(Texture* newTex, bool upload, char* name) {
 	char* input = name;
 
 	int flushRange = 0x30;
@@ -1342,20 +1364,34 @@ void LoadTextureFromRAM(Texture* newTex, bool upload, char* name) {
 
 	DC_FlushRange(newTex, flushRange);
 	newTex->palette = (unsigned short*)((uint32_t)newTex->palette + (uint32_t)newTex);
-	newTex->image = (char*)((uint32_t)newTex->image + (uint32_t)newTex);
+	newTex->image = (unsigned char*)((uint32_t)newTex->image + (uint32_t)newTex);
 	if (upload) {
 		UploadTexture(newTex);
 	}
 	// save the name
 	newTex->name = malloc(strlen(input) + 1);
 	strcpy(newTex->name, input);
+
+	Texture* retTex = newTex;
+
+	if (!newTex->dontReleaseFromRAM) {
+		retTex = (Texture*)malloc(sizeof(Texture));
+		*retTex = (*newTex);
+		retTex->palette = NULL;
+		retTex->image = NULL;
+		free(newTex);
+	}
+
 	// place in linked list
 	if (startTexture.next != NULL) {
-		startTexture.next->prev = newTex;
+		startTexture.next->prev = retTex;
 	}
-	newTex->next = startTexture.next;
-	startTexture.next = newTex;
-	newTex->prev = &startTexture;
+
+	retTex->next = startTexture.next;
+	startTexture.next = retTex;
+	retTex->prev = &startTexture;
+
+	return retTex;
 }
 
 Texture *LoadTexture(char *input, bool upload) {
@@ -1378,8 +1414,7 @@ Texture *LoadTexture(char *input, bool upload) {
 	Texture *newTex = malloc(fsize);
 	fread_MusicYielding(newTex, fsize, 1, f);
 	fclose(f);
-	LoadTextureFromRAM(newTex, upload, input);
-	return newTex;
+	return LoadTextureFromRAM(newTex, upload, input);
 }
 
 void UnloadTexture(Texture *tex) {
@@ -1562,7 +1597,7 @@ void UploadTexture(Texture* input) {
 	input->uploaded = true;
 }
 
-void LoadTextureFromRAM(Texture* newTex, bool upload, char* name) {
+Texture* LoadTextureFromRAM(Texture* newTex, bool upload, char* name) {
 	char* input = name;
 	newTex->palette = (unsigned short*)((uint32_t)newTex->palette + (uint32_t)newTex);
 	newTex->image = (char*)((uint32_t)newTex->image + (uint32_t)newTex);
@@ -1581,6 +1616,7 @@ void LoadTextureFromRAM(Texture* newTex, bool upload, char* name) {
 	if (upload) {
 		UploadTexture(newTex);
 	}
+	return newTex;
 }
 
 Texture* LoadTexture(char* input, bool upload) {
@@ -1607,9 +1643,7 @@ Texture* LoadTexture(char* input, bool upload) {
 	fread_MusicYielding(newTex, fsize, 1, f);
 	fclose(f);
 	
-	LoadTextureFromRAM(newTex, upload, input);
-
-	return newTex;
+	return LoadTextureFromRAM(newTex, upload, input);
 }
 
 void PCRenderNormalize(Vec3f* in, Vec3f* out) {
@@ -1628,9 +1662,9 @@ void RenderModel(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation
 	m4x4 rotationMatrix;
 	MakeScaleMatrix(scale->x, scale->y, scale->z, &scaleMatrix);
 	MakeRotationMatrix(rotation, &rotationMatrix);
-	scaleMatrix.m[3] = position->x;
-	scaleMatrix.m[7] = position->y;
-	scaleMatrix.m[11] = position->z;
+	scaleMatrix.m[3] = position->x - cameraRecentering.x;
+	scaleMatrix.m[7] = position->y - cameraRecentering.y;
+	scaleMatrix.m[11] = position->z - cameraRecentering.z;
 	CombineMatrices(&scaleMatrix, &rotationMatrix, &matrix);
 	m4x4 MVP;
 	CombineMatricesFull(&cameraMatrix, &matrix, &MVP);
@@ -1735,9 +1769,9 @@ void RenderModelRigged(Model* model, Vec3* position, Vec3* scale, Quaternion* ro
 	m4x4 rotationMatrix;
 	MakeScaleMatrix(scale->x, scale->y, scale->z, &scaleMatrix);
 	MakeRotationMatrix(rotation, &rotationMatrix);
-	scaleMatrix.m[3] = position->x;
-	scaleMatrix.m[7] = position->y;
-	scaleMatrix.m[11] = position->z;
+	scaleMatrix.m[3] = position->x - cameraRecentering.x;
+	scaleMatrix.m[7] = position->y - cameraRecentering.y;
+	scaleMatrix.m[11] = position->z - cameraRecentering.z;
 	CombineMatrices(&scaleMatrix, &rotationMatrix, &matrix);
 	m4x4 MVP;
 	CombineMatricesFull(&cameraMatrix, &matrix, &MVP);
@@ -2091,7 +2125,7 @@ int LoadAnimationAsync(char* input, void (*callBack)(void* data, Animation* anim
 	acd->anim = retValue;
 	acd->callBack = callBack;
 	acd->callBackData = callBackData;
-	return fread_Async(retValue, fsize, 1, f, LoadAnimationAsyncCallback, acd);
+	return fread_Async(retValue, fsize, 1, f, 0, LoadAnimationAsyncCallback, acd);
 }
 
 Animator *CreateAnimator(Model *referenceModel) {
@@ -2399,8 +2433,8 @@ void InitializeSubBG() {
 
 void UploadSprite(Sprite* input, bool sub, bool BG) {
 #ifndef _NOTDS
-	input->gfx = (char*)oamAllocateGfx(sub ? &oamSub : &oamMain, input->resolution, input->format);
-	float multiplier = input->format == 0 ? 0.5f : input->format == 1 ? 1.0f : 2.0f;
+	input->gfx = (char*)oamAllocateGfx(sub ? &oamSub : &oamMain, input->DSResolution, input->format);
+	float multiplier = input->format == 1 ? 0.5f : input->format == 2 ? 1.0f : 2.0f;
 	dmaCopy(input->image, input->gfx, multiplier * (input->width * input->height));
 	input->paletteOffset = 15;
 	// TODO: 8 & 4 bit sprites
@@ -2455,7 +2489,7 @@ void UploadSprite(Sprite* input, bool sub, bool BG) {
 }
 
 void LoadSpriteFromRAM(Sprite* sprite) {
-	sprite->image = (char*)((uint32_t)sprite->image + (uint32_t)sprite);
+	sprite->image = (unsigned char*)((uint32_t)sprite->image + (uint32_t)sprite);
 	sprite->palette = (unsigned short*)((uint32_t)sprite->palette + (uint32_t)sprite);
 }
 
@@ -2522,7 +2556,7 @@ int LoadSpriteAsync(char* input, bool sub, bool upload, void (*callBack)(void* d
 	scd->upload = upload;
 	scd->f = f;
 
-	return fread_Async(newSprite, fsize, 1, f, LoadSpriteAsyncCallback, scd);
+	return fread_Async(newSprite, fsize, 1, f, 0, LoadSpriteAsyncCallback, scd);
 }
 
 void UnloadSprite(Sprite* input) {
@@ -2600,6 +2634,53 @@ void RenderSpriteScaled(Sprite* sprite, int x, int y, bool flipX, bool flipY, f3
 }
 
 #ifndef _NOTDS
+
+int oamCount = 0;
+
+void oamSetSD(OamState* oam, int id, int x, int y, int priority,
+	int palette_alpha, SpriteSize size, SpriteColorFormat format,
+	const void* gfxOffset,
+	int affineIndex,
+	bool sizeDouble, bool hide, bool hflip, bool vflip, bool mosaic) {
+	SpriteEntry s;
+
+	if (hide) {
+		s.attribute[0] = ATTR0_DISABLED;
+		return;
+	}
+
+	s.shape = SPRITE_SIZE_SHAPE(size);
+	s.size = SPRITE_SIZE_SIZE(size);
+	s.x = x;
+	s.y = y;
+	s.palette = palette_alpha;
+	s.priority = priority;
+	s.hFlip = hflip;
+	s.vFlip = vflip;
+	s.isMosaic = mosaic;
+	s.gfxIndex = oamGfxPtrToOffset(oam, gfxOffset);
+
+
+	if (affineIndex >= 0 && affineIndex < 32) {
+		s.rotationIndex = affineIndex;
+		s.isSizeDouble = sizeDouble;
+		s.isRotateScale = true;
+	}
+	else {
+		s.isSizeDouble = false;
+		s.isRotateScale = false;
+	}
+
+	if (format != SpriteColorFormat_Bmp) {
+		s.colorMode = format;
+	}
+	else {
+		s.blendMode = format;
+		s.colorMode = 0;
+	}
+	oam->oamMemory[id] = s;
+}
+
 void RenderSpriteInternal(SpriteDrawCall* sprite) {
 	int realDrawPosX = 0;
 	int realDrawPosY = 0;
@@ -2621,24 +2702,26 @@ void RenderSpriteInternal(SpriteDrawCall* sprite) {
 	else if (sprite->spriteAlignY == SpriteAlignBottom) {
 		realDrawPosY = sprite->y + 192;
 	}
+	// TODO: this can only draw one sprite, it'll immediately overwrite future ones...
 	if (sprite->sprite->sub) {
-		int affineId = 0;
+		int affineId = -1;
 		if (sprite->scaled && spriteMatrixId < 32) {
 			oamAffineTransformation(&oamSub, spriteMatrixId, sprite->xScale, 0, 0, sprite->yScale);
 			affineId = spriteMatrixId;
 			++spriteMatrixId;
 		}
-		oamSet(&oamSub, 0, realDrawPosX, realDrawPosY, 0, sprite->sprite->paletteOffset, sprite->sprite->resolution, sprite->sprite->format, sprite->sprite->gfx, affineId, false, false, sprite->flipX, sprite->flipY, false);
+		oamSetSD(&oamSub, oamCount, realDrawPosX, realDrawPosY, 0, sprite->sprite->paletteOffset, sprite->sprite->DSResolution, sprite->sprite->format, sprite->sprite->gfx, affineId, true, false, sprite->flipX, sprite->flipY, false);
 	}
 	else {
-		int affineId = 0;
+		int affineId = -1;
 		if (sprite->scaled && spriteMatrixId < 32) {
-			oamAffineTransformation(&oamSub, spriteMatrixId, sprite->xScale, 0, 0, sprite->yScale);
+			oamAffineTransformation(&oamMain, spriteMatrixId, sprite->xScale, 0, 0, sprite->yScale);
 			affineId = spriteMatrixId;
 			++spriteMatrixId;
 		}
-		oamSet(&oamMain, 0, realDrawPosX, realDrawPosY, 0, sprite->sprite->paletteOffset, sprite->sprite->resolution, sprite->sprite->format, sprite->sprite->gfx, affineId, false, false, sprite->flipX, sprite->flipY, false);
+		oamSetSD(&oamMain, oamCount, realDrawPosX, realDrawPosY, 0, sprite->sprite->paletteOffset, sprite->sprite->DSResolution, sprite->sprite->format, sprite->sprite->gfx, affineId, true, false, sprite->flipX, sprite->flipY, false);
 	}
+	++oamCount;
 }
 #else
 void RenderSpriteInternal(SpriteDrawCall* sprite) {
@@ -2680,7 +2763,7 @@ void RenderSpriteInternal(SpriteDrawCall* sprite) {
 	drawMaterial.transparent = true;
 	Mesh *spriteModel = calloc(sizeof(Mesh), 1);
 	SetSubmeshCount(spriteModel, 1);
-	Vec2 UVs[] = { {0, 0}, {1, 0}, {1, 1}, {0, 1} };
+	Vec2f UVs[] = { {0, 0}, {1, 0}, {1, 1}, {0, 1} };
 	SetMeshUVs(spriteModel, UVs, 4);
 	int triangles[] = { 0, 1, 2, 2, 3, 0 };
 	SetSubmeshTriangles(spriteModel, 0, triangles, 6);
@@ -2688,12 +2771,12 @@ void RenderSpriteInternal(SpriteDrawCall* sprite) {
 	float width = (sprite->sprite->width / 256.0f) * divisor;
 	float height = (sprite->sprite->height / 192.0f) * divisorY;
 	if (sprite->scaled) {
-		width *= sprite->xScale;
-		height *= sprite->yScale;
+		width *= f32tofloat(sprite->xScale);
+		height *= f32tofloat(sprite->yScale);
 	}
-	Vec3 positions[] = { {realDrawPosX, realDrawPosY, 0}, {realDrawPosX + width, realDrawPosY, 0}, {realDrawPosX + width, realDrawPosY-height, 0}, {realDrawPosX, realDrawPosY-height, 0} };
+	Vec3f positions[] = { {realDrawPosX, realDrawPosY, 0}, {realDrawPosX + width, realDrawPosY, 0}, {realDrawPosX + width, realDrawPosY-height, 0}, {realDrawPosX, realDrawPosY-height, 0} };
 	if (sprite->flipY) {
-		Vec3 tmp[4];
+		Vec3f tmp[4];
 		for (int i = 0; i < 4; ++i) {
 			tmp[i] = positions[i];
 		}
@@ -2703,7 +2786,7 @@ void RenderSpriteInternal(SpriteDrawCall* sprite) {
 		positions[3].y = tmp[1].y;
 	}
 	if (sprite->flipX) {
-		Vec3 tmp[4];
+		Vec3f tmp[4];
 		for (int i = 0; i < 4; ++i) {
 			tmp[i] = positions[i];
 		}
@@ -2750,7 +2833,7 @@ void RenderBackground() {
 	SetSubmeshTriangles(bgModel, 0, tris, 32 * 32 * 6);
 	free(tris);
 
-	Vec2 *UVs = malloc(sizeof(Vec2) * 32 * 32 * 4);
+	Vec2f *UVs = malloc(sizeof(Vec2f) * 32 * 32 * 4);
 	float eightEquivX = 8.0f / BGTexture->width;
 	float eightEquivY = 8.0f / BGTexture->height;
 	int xWidth = BGTexture->width / 8;
@@ -2772,7 +2855,7 @@ void RenderBackground() {
 	SetMeshUVs(bgModel, UVs, 32 * 32 * 4);
 	free(UVs);
 
-	Vec3 *verts = malloc(sizeof(Vec3) * 32 * 32 * 4);
+	Vec3f *verts = malloc(sizeof(Vec3f) * 32 * 32 * 4);
 	eightEquivX = 8.0f / 256.0f;
 	eightEquivY = 8.0f / 192.0f;
 	for (int i = 0; i < 32; ++i) {
@@ -2811,11 +2894,11 @@ void RenderBottomScreen() {
 	SpriteDrawCall tempDraw;
 	Sprite tempSprite;
 	tempSprite.nativeSprite = subScreenTexture->texture;
-	tempDraw.x = -64.0f;
-	tempDraw.y = 48.0f;
+	tempDraw.x = -64;
+	tempDraw.y = 48;
 	tempDraw.scaled = true;
-	tempDraw.xScale = 0.25f;
-	tempDraw.yScale = 0.25f;
+	tempDraw.xScale = 0.25f*4096;
+	tempDraw.yScale = 0.25f*4096;
 	tempDraw.spriteAlignX = SpriteAlignRight;
 	tempDraw.spriteAlignY = SpriteAlignBottom;
 	tempSprite.sub = false;
@@ -2832,14 +2915,15 @@ void FinalizeSprites() {
 #ifndef _NOTDS
 	oamClear(&oamMain, 0, 0);
 	oamClear(&oamSub, 0, 0);
+	oamCount = 0;
 #else
 	ClearDepth();
 #endif
-	spriteMatrixId = 1;
+	spriteMatrixId = 0;
 	for (int i = 0; i < mainSpriteCallCount; ++i) {
 		RenderSpriteInternal(&mainSpriteCalls[i]);
 	}
-	spriteMatrixId = 1;
+	spriteMatrixId = 0;
 #ifdef _NOTDS
 	UseRenderTexture(subScreenTexture);
 	if (BGTexture != NULL) {
@@ -2849,6 +2933,8 @@ void FinalizeSprites() {
 	else {
 		ClearColor();
 	}
+#else
+	oamCount = 0;
 #endif
 	for (int i = 0; i < subSpriteCallCount; ++i) {
 		RenderSpriteInternal(&subSpriteCalls[i]);
@@ -2859,6 +2945,10 @@ void FinalizeSprites() {
 #endif
 	mainSpriteCallCount = 0;
 	subSpriteCallCount = 0;
+#ifndef _NOTDS
+	oamUpdate(&oamMain);
+	oamUpdate(&oamSub);
+#endif
 }
 
 void SetBackgroundTile(int x, int y, int id) {
@@ -2879,10 +2969,17 @@ void SetupCameraMatrix() {
 	glMultMatrix4x4(&tmpMat);
 	#endif
 	gluPerspectivef32(cameraFOV, 5461, cameraNear, cameraFar);
+	Vec3 cameraPositionMod;
+	cameraPositionMod.x = cameraPosition.x % 4096;
+	cameraPositionMod.y = cameraPosition.y % 4096;
+	cameraPositionMod.z = cameraPosition.z % 4096;
+	cameraRecentering.x = cameraPosition.x - cameraPositionMod.x;
+	cameraRecentering.y = cameraPosition.y - cameraPositionMod.y;
+	cameraRecentering.z = cameraPosition.z - cameraPositionMod.z;
 	Vec3 camPosInverse;
-	camPosInverse.x = -cameraPosition.x;
-	camPosInverse.y = -cameraPosition.y;
-	camPosInverse.z = -cameraPosition.z;
+	camPosInverse.x = -cameraPositionMod.x;
+	camPosInverse.y = -cameraPositionMod.y;
+	camPosInverse.z = -cameraPositionMod.z;
 	m4x4 camTransform;
 	MakeTranslationMatrix(camPosInverse.x, camPosInverse.y, camPosInverse.z, &camTransform);
 	// rotation
@@ -2894,8 +2991,61 @@ void SetupCameraMatrix() {
 	m4x4 trueCameraMatrix;
 	MatrixToDSMatrix(&cameraMatrix, &trueCameraMatrix);
 	glMultMatrix4x4(&trueCameraMatrix);
+
+	// set viewport to be size of screen
+	glViewport(0, 0, 255, 191);
+}
+
+void SetupCameraMatrixPartial(int x, int y, int width, int height) {
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	m4x4 screenAdjustMatrix = { 0 };
+	// offset target...note: don't need to multiply by 4096 for divf32! it'll convert to base-4096 post division for us, due to...well, 0.1/0.1 = 1.0
+	f32 oneMinusWidth = (4096 - divf32(width, 256)) * 2;
+	f32 oneMinusHeight = (4096 - divf32(height, 192)) * 2;
+	screenAdjustMatrix.m[12] = Lerp(oneMinusWidth, -oneMinusWidth, divf32(x, 256 - width));
+	screenAdjustMatrix.m[13] = Lerp(oneMinusHeight, -oneMinusHeight, divf32(y, 192 - height));
+	screenAdjustMatrix.m[0] = 4096;
+	screenAdjustMatrix.m[5] = 4096;
+	screenAdjustMatrix.m[10] = 4096;
+	screenAdjustMatrix.m[15] = 4096;
+	glMultMatrix4x4(&screenAdjustMatrix);
+#ifdef FLIP_X
+	m4x4 tmpMat;
+	MakeScaleMatrix(-4096, 4096, 4096, &tmpMat);
+	glMultMatrix4x4(&tmpMat);
+#endif
+	gluPerspectivef32(cameraFOV, divf32(width, height), cameraNear, cameraFar);
+	Vec3 cameraPositionMod;
+	cameraPositionMod.x = cameraPosition.x % 4096;
+	cameraPositionMod.y = cameraPosition.y % 4096;
+	cameraPositionMod.z = cameraPosition.z % 4096;
+	cameraRecentering.x = cameraPosition.x - cameraPositionMod.x;
+	cameraRecentering.y = cameraPosition.y - cameraPositionMod.y;
+	cameraRecentering.z = cameraPosition.z - cameraPositionMod.z;
+	Vec3 camPosInverse;
+	camPosInverse.x = -cameraPositionMod.x;
+	camPosInverse.y = -cameraPositionMod.y;
+	camPosInverse.z = -cameraPositionMod.z;
+	m4x4 camTransform;
+	MakeTranslationMatrix(camPosInverse.x, camPosInverse.y, camPosInverse.z, &camTransform);
+	// rotation
+	Quaternion inverseCamRot;
+	QuaternionInverse(&cameraRotation, &inverseCamRot);
+	m4x4 camRotation;
+	MakeRotationMatrix(&inverseCamRot, &camRotation);
+	CombineMatrices(&camRotation, &camTransform, &cameraMatrix);
+	m4x4 trueCameraMatrix;
+	MatrixToDSMatrix(&cameraMatrix, &trueCameraMatrix);
+	glMultMatrix4x4(&trueCameraMatrix);
+
+	glViewport(x, y, (x+width)-1, (y+height)-1);
 }
 #else
+
+void SetupCameraMatrixPartial(int x, int y, int width, int height) {
+	// ? not used for PC!
+}
 
 void SetupCameraMatrix() {
 	m4x4 perspectiveMatrix;
@@ -2907,10 +3057,17 @@ void SetupCameraMatrix() {
 	CombineMatricesFull(&tmpMat, &perspectiveMatrix, &workMat);
 	memcpy(&perspectiveMatrix, &workMat, sizeof(m4x4));
 #endif
+	Vec3 cameraPositionMod;
+	cameraPositionMod.x = cameraPosition.x % 4096;
+	cameraPositionMod.y = cameraPosition.y % 4096;
+	cameraPositionMod.z = cameraPosition.z % 4096;
+	cameraRecentering.x = cameraPosition.x - cameraPositionMod.x;
+	cameraRecentering.y = cameraPosition.y - cameraPositionMod.y;
+	cameraRecentering.z = cameraPosition.z - cameraPositionMod.z;
 	Vec3 camPosInverse;
-	camPosInverse.x = -cameraPosition.x;
-	camPosInverse.y = -cameraPosition.y;
-	camPosInverse.z = -cameraPosition.z;
+	camPosInverse.x = -cameraPositionMod.x;
+	camPosInverse.y = -cameraPositionMod.y;
+	camPosInverse.z = -cameraPositionMod.z;
 	m4x4 camTranslation;
 	MakeTranslationMatrix(camPosInverse.x, camPosInverse.y, camPosInverse.z, &camTranslation);
 	// rotation
@@ -2981,4 +3138,105 @@ bool QueueAnimation(Animator* animator, Animation* animation, f32 lerpTime) {
 void DestroyAnimator(Animator* animator) {
 	free(animator->items);
 	free(animator);
+}
+
+void Set3DOnTop() {
+	touch3D = false;
+#ifndef _NOTDS
+	lcdMainOnTop();
+#endif
+}
+
+void Set3DOnBottom() {
+	touch3D = true;
+#ifndef _NOTDS
+	lcdMainOnBottom();
+#endif
+}
+
+unsigned short* storageTexture;
+
+void Initialize3D(bool multipass, bool subBGFull) {
+#ifndef _NOTDS
+	// initialize gl engine
+	glInit();
+
+	videoSetMode(MODE_0_3D);
+	videoSetModeSub(MODE_0_2D);
+
+	// AA because why not
+	glEnable(GL_ANTIALIAS);
+
+	glEnable(GL_TEXTURE_2D);
+
+	glEnable(GL_BLEND);
+
+	vramSetBankA(VRAM_A_TEXTURE);
+	vramSetBankB(VRAM_B_TEXTURE);
+	if (subBGFull) {
+		vramSetBankC(VRAM_C_SUB_BG);
+	}
+	else {
+		if (multipass) {
+			// if we're in multipass, B will be used for the multipass, so set C to texture slot 1
+			vramSetBankC(VRAM_C_TEXTURE_SLOT1);
+		}
+		else {
+			vramSetBankC(VRAM_C_TEXTURE);
+		}
+		vramSetBankH(VRAM_H_SUB_BG);
+	}
+	if (subBGFull && !multipass) {
+		vramSetBankD(VRAM_D_TEXTURE_SLOT2);
+	}
+	else if (multipass) {
+		vramSetBankD(VRAM_D_LCD);
+		videoSetMode(MODE_3_3D);
+		vramSetBankB(VRAM_B_LCD);
+		storageTexture = (unsigned short*)malloc(sizeof(unsigned short) * 256 * 192);
+		memset(storageTexture, 0xFFFFFFFF, sizeof(unsigned short) * 256 * 192);
+	}
+	else {
+		vramSetBankD(VRAM_D_TEXTURE);
+	}
+	vramSetBankE(VRAM_E_MAIN_SPRITE);
+	vramSetBankF(VRAM_F_TEX_PALETTE_SLOT0);
+	vramSetBankG(VRAM_G_TEX_PALETTE_SLOT5);
+	vramSetBankI(VRAM_I_SUB_SPRITE);
+	glMaterialShinyness();
+	oamInit(&oamMain, SpriteMapping_Bmp_1D_128, false);
+	oamInit(&oamSub, SpriteMapping_Bmp_1D_128, false);
+
+	consoleDemoInit();
+#endif
+	multipassRendering = multipass;
+}
+
+void SetMultipassType(int type, f32 distance, MultipassTargetRect manualFirstPassRect, MultipassTargetRect manualSecondPassRect) {
+	multipassType = type;
+	multipassDistance = distance;
+}
+
+void SaveLCD() {
+#ifndef _NOTDS
+	// dma copying from the LCD storage to our temporary texture for multipass
+	dmaBusyWait(1);
+	//REG_DMAxCNT_H(2) = 0; // disable the DMA...
+	dmaCopy(VRAM_D, storageTexture, sizeof(unsigned short) * 256 * 192);
+	//dmaCopyWordsAsynch(1, VRAM_D, storageTexture, sizeof(unsigned short) * 256 * 192);
+	dmaBusyWait(1);
+	//DC_FlushRange(storageTexture, sizeof(unsigned short) * 256 * 192);
+#endif
+}
+
+void RestoreLCD() {
+#ifndef _NOTDS
+	//dmaBusyWait(1);
+	//dmaBusyWait(2);
+	// now we have to DMA copy to the screen! no built in function gives us enough control, so write the registers ourselves...
+	REG_DMAxSAD(2) = (unsigned int)storageTexture;
+	REG_DMAxDAD(2) = 0x04000068;
+	REG_DMAxCNT_L(2) = 4; // copy 8 pixels per copy; 4 int32s
+	REG_DMAxCNT_H(2) = DMA_MODE_DST(DmaMode_Fixed) | DMA_MODE_SRC(DmaMode_Increment) | DMA_UNIT_32 | DMA_TIMING(DmaTiming_MemDisp) | DMA_START | DMA_MODE_REPEAT; // has to be set to repeat so it continues outputting it
+#endif
 }

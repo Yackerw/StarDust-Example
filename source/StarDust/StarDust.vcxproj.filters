@@ -93,6 +93,9 @@
     <ClCompile Include="..\arm9\source\sdsocket.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\arm9\source\sdinput.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\arm9\source\sdcollision.h">
@@ -147,6 +150,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\arm9\source\sdsocket.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\arm9\source\sdinput.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

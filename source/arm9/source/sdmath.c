@@ -531,7 +531,10 @@ void NormalFromVerts(Vec3s *vert1, Vec3s *vert2, Vec3s *vert3, Vec3s *out) {
 	out->x = mulf32(U.y, V.z) - mulf32(U.z, V.y);
 	out->y = mulf32(U.z, V.x) - mulf32(U.x, V.z);
 	out->z = mulf32(U.x, V.y) - mulf32(U.y, V.x);
-	Normalize(out, out);
+	f32 magnitude = sqrtf32(out->x * out->x + out->y * out->y + out->z * out->z);
+	out->x = divf32(out->x, magnitude);
+	out->y = divf32(out->y, magnitude);
+	out->z = divf32(out->z, magnitude);
 }
 
 // above function is unreliable at low precision
@@ -755,7 +758,7 @@ void GenerateViewFrustum(m4x4* matrix, ViewFrustum* frustumOut) {
 	m4x4 inverted;
 	InvertMatrix(matrix, &inverted);
 	// we have to generate all the vertices of the matrix for our frustum AABB code...
-	Vec3 workVec = { -4096, -4096, -4096 };
+	Vec3 workVec = { { { -4096, -4096, -4096 } } };
 	MatrixTimesVec3(&inverted, &workVec, &frustumOut->points[0]);
 	workVec.z = 4096;
 	MatrixTimesVec3(&inverted, &workVec, &frustumOut->points[1]);
@@ -820,7 +823,7 @@ long long Int64Div(int left, int right) {
 
 	while (REG_DIVCNT & DIV_BUSY);
 
-	REG_DIV_NUMER = ((int64)left) << 12;
+	REG_DIV_NUMER = ((long long)left) << 12;
 	REG_DIV_DENOM_L = right;
 
 	while (REG_DIVCNT & DIV_BUSY);

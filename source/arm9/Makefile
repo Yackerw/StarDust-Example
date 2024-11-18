@@ -24,9 +24,9 @@ GRAPHICS :=
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-ARCH := -marm -mthumb-interwork -march=armv5te -mtune=arm946e-s
+ARCH := -march=armv5te -mtune=arm946e-s
 
-CFLAGS   := -g -Wall -Ofast -std=gnu99\
+CFLAGS   := -g -Wall -O2 -ffunction-sections -fdata-sections -std=gnu99\
 			-fomit-frame-pointer\
 			-ffast-math\
 			-msoft-float\
@@ -115,8 +115,6 @@ else
 # main targets
 #---------------------------------------------------------------------------------
 $(ARM9ELF) : $(OFILES)
-	@echo linking $(notdir $@)
-	@$(LD)  $(LDFLAGS) $(OFILES) $(LIBPATHS) $(LIBS) -o $@
 
 #---------------------------------------------------------------------------------
 %.bin.o %_bin.h : %.bin

@@ -32,6 +32,7 @@
     <ClCompile Include="..\arm9\source\sdcollision.c" />
     <ClCompile Include="..\arm9\source\sddelta.c" />
     <ClCompile Include="..\arm9\source\sdfile.c" />
+    <ClCompile Include="..\arm9\source\sdinput.c" />
     <ClCompile Include="..\arm9\source\sdmath.c" />
     <ClCompile Include="..\arm9\source\sdnetworking.c" />
     <ClCompile Include="..\arm9\source\sdobject.c" />
@@ -53,6 +54,7 @@
     <ClInclude Include="..\arm9\source\sdcollision.h" />
     <ClInclude Include="..\arm9\source\sddelta.h" />
     <ClInclude Include="..\arm9\source\sdfile.h" />
+    <ClInclude Include="..\arm9\source\sdinput.h" />
     <ClInclude Include="..\arm9\source\sdmath.h" />
     <ClInclude Include="..\arm9\source\sdnetworking.h" />
     <ClInclude Include="..\arm9\source\sdobject.h" />

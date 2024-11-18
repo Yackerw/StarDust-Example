@@ -30,6 +30,9 @@ enum SpriteRenderPositionY {SpriteAlignTop, SpriteAlignBottom = 2};
 
 enum VertexHeaderBitflags {VTX_MATERIAL_CHANGE = 1, VTX_STRIPS = 2, VTX_QUAD = 4};
 
+// TODO: bottom screen 3D, probably
+enum MultipassRenderType {MULTIPASS_MANUAL, MULTIPASS_LEFTRIGHT};
+
 typedef struct {
 	v16 x;
 	v16 y;
@@ -135,7 +138,7 @@ struct Texture {
 	char type;
 	char width;
 	char height;
-	bool releaseFromRAM;
+	bool dontReleaseFromRAM;
 	unsigned int numReferences;
 	unsigned char mapTypeU;
 	unsigned char mapTypeV;
@@ -183,10 +186,26 @@ typedef struct {
 	unsigned char* image;
 	unsigned short* palette;
 	char* gfx;
-	void* nativeSprite;
+	union {
+		void* nativeSprite;
+		int DSResolution;
+	};
 } Sprite;
 
+typedef struct {
+	int x;
+	int y;
+	int width;
+	int height;
+} MultipassTargetRect;
+
 extern Texture startTexture;
+
+extern bool touch3D;
+
+extern bool multipassRendering;
+extern int multipassType;
+extern f32 multipassDistance;
 
 void SetupModelFromMemory(Model* model, char* textureDir, bool asyncTextures, void (*asyncCallback)(void* data), void* asyncCallbackData);
 
@@ -205,7 +224,7 @@ void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion *rotation
 
 void UploadTexture(Texture* input);
 
-void LoadTextureFromRAM(Texture* input, bool upload, char* name);
+Texture *LoadTextureFromRAM(Texture* input, bool upload, char* name);
 
 Texture *LoadTexture(char *input, bool upload);
 
@@ -243,6 +262,8 @@ void DestroyGeneratedModel(Model* m);
 
 void SetupCameraMatrix();
 
+void SetupCameraMatrixPartial(int x, int y, int width, int height);
+
 bool AABBInCamera(Vec3* min, Vec3* max, m4x4* transform);
 
 bool QueueAnimation(Animator* animator, Animation* animation, f32 lerpTime);
@@ -268,5 +289,16 @@ void FinalizeSprites();
 void SetBackgroundTile(int x, int y, int tileId);
 
 void RenderTransparentModels();
+
+void Set3DOnTop();
+void Set3DOnBottom();
+
+void Initialize3D(bool multipass, bool subBG);
+
+void SetMultipassType(int type, f32 distance, MultipassTargetRect manualFirstPassRect, MultipassTargetRect manualSecondPassRect);
+
+
+void SaveLCD();
+void RestoreLCD();
 
 #endif

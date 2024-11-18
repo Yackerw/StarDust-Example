@@ -19,11 +19,15 @@ typedef struct {
 #ifndef _NOTDS
 #include <nds/ndstypes.h>
 #include "sdmath.h"
+#include <calico.h>
 
 bool playingMusic;
 PlayingSoundData currMusicData;
 
 int sfxIds[16];
+
+SoundData localSound;
+Mutex soundMutex;
 
 #define FIFO_SOUND_PLAY 0
 #define FIFO_SOUND_STOP 1
@@ -50,6 +54,8 @@ int prevMusicRemainder;
 char musicBuffer[30720];
 int musicBufferReadOffset = 0;
 int musicBufferOffset = 0;
+
+Mutex musicMutex;
 
 void MusicCallback(int length, char* dest) {
 	memcpy(dest, &musicBuffer[musicBufferOffset], length * currMusic->bytesPerSample);
@@ -82,9 +88,11 @@ void MusicRead(int length, char* dest) {
 }
 
 void UpdateMusicBuffer() {
+	mutexLock(&musicMutex);
 	int startRead = musicBufferReadOffset;
 	int endRead = musicBufferOffset;
 	if (startRead == endRead) {
+		mutexUnlock(&musicMutex);
 		return;
 	}
 	int lastSample = 30720;
@@ -102,6 +110,7 @@ void UpdateMusicBuffer() {
 		MusicRead(endRead - startRead, &musicBuffer[startRead]);
 	}
 	musicBufferReadOffset = musicBufferOffset;
+	mutexUnlock(&musicMutex);
 }
 
 void MusicTimerCallback() {
@@ -168,17 +177,17 @@ void PlayMusic(char* filedir, int offset) {
 		fseek(currMusic->streamFile, 0, SEEK_SET);
 	}
 	fseek(currMusic->streamFile, currMusic->fOffset, SEEK_SET);
-	SoundData* toPlay = malloc(sizeof(SoundData));
+	SoundData toPlay;
 	currMusicData = sd;
 	currMusic->samples = malloc(4096);
 
-	toPlay->sound = sd.sound;
-	toPlay->pan = sd.pan;
-	toPlay->pitch = sd.pitch;
-	toPlay->volume = sd.volume;
-	toPlay->loop = true;
-	toPlay->loopStart = 0;
-	toPlay->loopEnd = 4096 / sd.sound->bytesPerSample;
+	toPlay.sound = sd.sound;
+	toPlay.pan = sd.pan;
+	toPlay.pitch = sd.pitch;
+	toPlay.volume = sd.volume;
+	toPlay.loop = true;
+	toPlay.loopStart = 0;
+	toPlay.loopEnd = 4096 / sd.sound->bytesPerSample;
 
 	musicBufferReadOffset = 0;
 	musicBufferOffset = 0;
@@ -200,8 +209,7 @@ void PlayMusic(char* filedir, int offset) {
 
 	DC_FlushRange(currMusic, sizeof(SoundEffect));
 
-	currMusicId = PlaySound(toPlay);
-	free(toPlay);
+	currMusicId = PlaySound(&toPlay);
 	currMusic->dataSize = tmp;
 	if (currMusicId == -1) {
 		StopMusic();
@@ -214,7 +222,7 @@ void PlayMusic(char* filedir, int offset) {
 }
 
 void InitSound() {
-	soundEnable();
+	
 }
 
 void StopMusic() {
@@ -235,14 +243,14 @@ void UninitializeAudio() {
 
 
 int PlaySound(SoundData* sound) {
+	mutexLock(&soundMutex);
 	FIFOData.type = FIFO_SOUND_PLAY;
-	FIFOData.data = sound;
+	localSound = (*sound);
+	FIFOData.data = &localSound;
 	DC_FlushRange(&FIFOData, sizeof(FIFOAudio));
-	fifoSendAddress(FIFO_USER_01, &FIFOData);
-	while (!fifoCheckValue32(FIFO_USER_01)) {
-		
-	}
-	int soundValue = fifoGetValue32(FIFO_USER_01);
+	DC_FlushRange(&localSound, sizeof(SoundData));
+	int soundValue = pxiSendAndReceive(PxiChannel_User0, (unsigned int)&FIFOData);
+	mutexUnlock(&soundMutex);
 	if (soundValue == -1) {
 		return -1;
 	}
@@ -269,12 +277,7 @@ void StopSoundEffect(int id) {
 	FIFOData.type = FIFO_SOUND_STOP;
 	FIFOData.data = (void*)currChannel;
 	DC_FlushRange(&FIFOData, sizeof(FIFOAudio));
-	fifoSendAddress(FIFO_USER_01, &FIFOData);
-	// wait for it to finish
-	while (!fifoCheckValue32(FIFO_USER_01)) {
-
-	}
-	fifoGetValue32(FIFO_USER_01);
+	pxiSendAndReceive(PxiChannel_User0, (unsigned int)&FIFOData);
 }
 
 void SetSoundPan(int id, f32 pan) {
@@ -291,12 +294,7 @@ void SetSoundPan(int id, f32 pan) {
 	FIFOParameters.id = currChannel;
 	FIFOParameters.value = pan;
 	DC_FlushRange(&FIFOParameters, sizeof(FIFOAudioParameter));
-	fifoSendAddress(FIFO_USER_01, &FIFOData);
-	// wait for it to finish
-	while (!fifoCheckValue32(FIFO_USER_01)) {
-
-	}
-	fifoGetValue32(FIFO_USER_01);
+	pxiSendAndReceive(PxiChannel_User0, (unsigned int)&FIFOData);
 }
 
 void SetSoundVolume(int id, f32 volume) {
@@ -313,12 +311,7 @@ void SetSoundVolume(int id, f32 volume) {
 	FIFOParameters.id = currChannel;
 	FIFOParameters.value = volume;
 	DC_FlushRange(&FIFOParameters, sizeof(FIFOAudioParameter));
-	fifoSendAddress(FIFO_USER_01, &FIFOData);
-	// wait for it to finish
-	while (!fifoCheckValue32(FIFO_USER_01)) {
-
-	}
-	fifoGetValue32(FIFO_USER_01);
+	pxiSendAndReceive(PxiChannel_User0, (unsigned int)&FIFOData);
 }
 
 int GetMusicPosition() {
@@ -431,7 +424,7 @@ int LoadWavAsync(char* input, void (*callBack)(void* data, SoundEffect* sound), 
 	awd->callBackData = callBackData;
 	awd->se = audioInfo;
 
-	return fread_Async(audioInfo->samples, wavHeader.dataSize, 1, f, LoadWavAsyncCallback, awd);
+	return fread_Async(audioInfo->samples, wavHeader.dataSize, 1, f, 0, LoadWavAsyncCallback, awd);
 }
 
 #ifdef _WIN32

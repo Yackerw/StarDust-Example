@@ -1,7 +1,7 @@
-#include <nds.h>
 #include "sddelta.h"
 #include "player.h"
 #include "sdsound.h"
+#include "sdinput.h"
 
 Animation* idleAnim, * walkAnim, * jumpUpAnim, * jumpDownAnim;
 SoundEffect* jumpSound;
@@ -36,12 +36,11 @@ void PlayerStart(Object* obj) {
 
 void PlayerUpdate(Object* obj) {
 	PlayerValues* pv = obj->data;
-	u16 keys = keysHeld();
 	Vec3 moveAxis;
-	moveAxis.x = ((keys & KEY_RIGHT) != 0) * 4096;
-	moveAxis.x += ((keys & KEY_LEFT) != 0) * -4096;
-	moveAxis.z = ((keys & KEY_UP) != 0) * -4096;
-	moveAxis.z += ((keys & KEY_DOWN) != 0) * 4096;
+	moveAxis.x = GetKey(INPUT_RIGHT) * 4096;
+	moveAxis.x += GetKey(INPUT_LEFT) * -4096;
+	moveAxis.z = GetKey(INPUT_UP) * -4096;
+	moveAxis.z += GetKey(INPUT_DOWN) * 4096;
 	moveAxis.y = 0;
 	if (moveAxis.x != 0 || moveAxis.z != 0) {
 		Normalize(&moveAxis, &moveAxis);
@@ -51,7 +50,7 @@ void PlayerUpdate(Object* obj) {
 	Vec3 tmpMoveAxis;
 	QuatTimesVec3(&tmpQuat, &moveAxis, &tmpMoveAxis);
 
-	if (keysDown() & KEY_A && pv->onGround) {
+	if (GetKeyDown(INPUT_A) && pv->onGround) {
 		pv->onGround = false;
 		pv->vSpeed = 14 * 4096;
 
@@ -110,12 +109,11 @@ void PlayerUpdate(Object* obj) {
 void PlayerLateUpdate(Object* obj) {
 	PlayerValues* pv = obj->data;
 	// update camera to follow us here
-	u16 keys = keysHeld();
-	if (keys & KEY_R) {
+	if (GetKey(INPUT_R)) {
 		// FixedDegreesToRotation can be multiplied by to convert from 0-360*4096 degree fixed point to 0-32767 fixed point angles used by trigonometric functions
 		pv->cameraAngle -= mulf32(mulf32(4096 * 110, deltaTime), FixedDegreesToRotation);
 	}
-	else if (keys & KEY_L) {
+	else if (GetKey(INPUT_L)) {
 		pv->cameraAngle += mulf32(mulf32(4096 * 110, deltaTime), FixedDegreesToRotation);
 	}
 	pv->cameraAngle = f32Mod(pv->cameraAngle, mulf32(4096 * 360, FixedDegreesToRotation));
