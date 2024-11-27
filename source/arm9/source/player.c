@@ -32,6 +32,12 @@ void PlayerStart(Object* obj) {
 	obj->moves = true;
 	jumpSound = LoadWav("nitro:/sfx/jump.wav");
 	PlayAnimation(obj->animator, idleAnim, 0);
+
+	// LIGHTING OVERRIDE!
+	for (int i = 0; i < obj->mesh->materialCount; ++i) {
+		SetMaterialLightOverride(&obj->mesh->defaultMats[i], 1, 0x1F, 0, 0, 4096, 0, 0);
+		obj->mesh->defaultMats[i].lightingFlags |= LIGHT_OVERRIDE1;
+	}
 }
 
 void PlayerUpdate(Object* obj) {

@@ -29,7 +29,7 @@ int networkedObjectsCount;
 
 bool layerCollision[1024];
 
-void DestroyObjectInternal(Object *object) {
+ITCM_CODE void DestroyObjectInternal(Object *object) {
 	if (destroyFuncs[object->objectType] != NULL) {
 		destroyFuncs[object->objectType](object);
 	}
@@ -54,7 +54,7 @@ void DestroyObjectInternal(Object *object) {
 	free(object);
 }
 
-bool RaycastWorld(Vec3* point, Vec3* direction, f32 length, unsigned int layerMask, f32* t, CollisionHit* hitInfo) {
+ITCM_CODE bool RaycastWorld(Vec3* point, Vec3* direction, f32 length, unsigned int layerMask, f32* t, CollisionHit* hitInfo) {
 	Object* colObject = firstObject.next;
 
 	bool everHit = false;
@@ -252,7 +252,7 @@ int SphereCollisionCheck(CollisionSphere *sphere, unsigned int layerMask, Collis
 					if (objsFound >= maxHit) return objsFound;
 				}
 			}
-			free(trisToCollideWith);
+			ReleaseTriangleOctreeAllocation(trisToCollideWith);
 		}
 		else if (meshObject->sphereCol != NULL) {
 			if (SphereOnSphere(sphere, meshObject->sphereCol, &hitInfos[objsFound].penetration, &hitInfos[objsFound].normal)) {
@@ -281,7 +281,7 @@ int SphereCollisionCheck(CollisionSphere *sphere, unsigned int layerMask, Collis
 	return objsFound;
 }
 
-void MoveObjectOut(f32 penetration, Vec3 *normal, CollisionSphere *sphere, Object *meshObject, CollisionSphere *newSphere) {
+ITCM_CODE void MoveObjectOut(f32 penetration, Vec3 *normal, CollisionSphere *sphere, Object *meshObject, CollisionSphere *newSphere) {
 	// adjust the normal once more
 	Vec3 rotNormal;
 	QuatTimesVec3(&meshObject->rotation, normal, &rotNormal);
@@ -297,7 +297,7 @@ void MoveObjectOut(f32 penetration, Vec3 *normal, CollisionSphere *sphere, Objec
 	Vec3Addition(sphere->position, &rotNormal, sphere->position);
 }
 
-void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, Object *sphereObject) {
+ITCM_CODE void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, Object *sphereObject) {
 	// apply blockmap
 	Vec3 rotatedPosition;
 	Vec3 tmpPos;
@@ -378,10 +378,10 @@ void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, Object *sph
 				MoveObjectOut(hitInfo.penetration, &hitInfo.normal, sphere, meshObject, &newSphere);
 		}
 	}
-	free(trisToCollideWith);
+	ReleaseTriangleOctreeAllocation(trisToCollideWith);
 }
 
-void SphereObjOnSphereObj(Object *collider, Object* collidee) {
+ITCM_CODE void SphereObjOnSphereObj(Object *collider, Object* collidee) {
 	f32 pen;
 	Vec3 normal;
 	if (SphereOnSphere(collider->sphereCol, collidee->sphereCol, &pen, &normal)) {
@@ -400,7 +400,7 @@ void SphereObjOnSphereObj(Object *collider, Object* collidee) {
 	}
 }
 
-void SphereObjOnBoxObj(Object* collider, Object* collidee) {
+ITCM_CODE void SphereObjOnBoxObj(Object* collider, Object* collidee) {
 	// first, do AABB check
 	f32 maxExtents = mulf32(Max(collidee->boxCol->extents.x, Max(collidee->boxCol->extents.y, collidee->boxCol->extents.z)), 4096 + 2048);
 	f32 extentsPlusRadius = maxExtents + collider->sphereCol->radius;
@@ -427,7 +427,7 @@ void SphereObjOnBoxObj(Object* collider, Object* collidee) {
 	}
 }
 
-int GetObjectsOfType(int type, Object **out, int maxObjects) {
+ITCM_CODE int GetObjectsOfType(int type, Object **out, int maxObjects) {
 	Object *currObject = firstObject.next;
 	int currIdx = 0;
 	while (currObject != NULL) {
@@ -445,7 +445,7 @@ int GetObjectsOfType(int type, Object **out, int maxObjects) {
 
 bool multipassSecondaryBank = false;
 
-void ProcessObjects() {
+ITCM_CODE void ProcessObjects() {
 	// update networking before everything else
 	if (defaultNetInstance != NULL) {
 		UpdateNetworking(defaultNetInstance, deltaTime);
@@ -499,6 +499,14 @@ void ProcessObjects() {
 		}
 		currObject = currObject->next;
 	}
+
+	// we must ensure the projection matrix is identity here, because updateanimator uses the matrix hardware!
+#ifndef _NOTDS
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glMatrixMode(GL_POSITION);
+#endif
+
 	//late update
 	currObject = firstObject.next;
 	while (currObject != NULL) {
@@ -524,6 +532,8 @@ void ProcessObjects() {
 
 	// do rendering, now
 #ifndef _NOTDS
+	glClearPolyID(0x1F);
+	glClearColor(0, 0, 0, 0x1F);
 	if (!multipassRendering) {
 		// set up the camera
 		SetupCameraMatrix();
@@ -533,17 +543,18 @@ void ProcessObjects() {
 		while (currObject != NULL) {
 			if (currObject->mesh != NULL && !currObject->culled) {
 				if (currObject->mesh->skeletonCount != 0 && currObject->animator != NULL) {
-					RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator);
+					RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator, currObject->renderPriority);
 				}
 				else {
-					RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL);
+					RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->renderPriority);
 				}
 			}
 			currObject = currObject->next;
 		}
+		RenderTransparentModels();
 		FinalizeSprites();
 		bgUpdate();
-		glFlush(0);
+		glFlush(GL_TRANS_MANUALSORT);
 		threadWaitForVBlank();
 		// update music
 		UpdateMusicBuffer();
@@ -561,28 +572,33 @@ void ProcessObjects() {
 			while (currObject != NULL) {
 				if (currObject->mesh != NULL && !currObject->culled) {
 					if (currObject->mesh->skeletonCount != 0 && currObject->animator != NULL) {
-						RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator);
+						RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator, currObject->renderPriority);
 					}
 					else {
-						RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL);
+						RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->renderPriority);
 					}
 				}
 				currObject = currObject->next;
 			}
-			glFlush(0);
+			RenderTransparentModels();
+			glFlush(GL_TRANS_MANUALSORT);
 			threadWaitForVBlank();
 			// update music
 			UpdateMusicBuffer();
 			if (i == 0) {
 				REG_DISPCAPCNT = (targetBank << 16) | (3 << 20) | (1 << 24) | (1 << 31); // applies to next *rendered* frame; i.e. 2 glflush from now, the next glflush gets rendered. so we have to
 				// backtrack in time and use the settings for the previous frame
-				// change the display to display from VRAM, bank B or D depending
-				REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (2 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
+				// change the display to display normally
+				REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
 				SetupCameraMatrixPartial(128, 0, 128, 192); // applies to next glflush
-				bgSetPriority(3, 3); // next rendered frame; shouldn't matter since we display from vram, but i'll leave it documented here for the next part
-				bgSetPriority(0, 0);
-				vramSetBankD(VRAM_D_LCD); // next rendered frame
-				vramSetBankB(VRAM_B_LCD);
+				if (multipassSecondaryBank) { // applies to next rendered frame
+					vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
+					vramSetBankB(VRAM_B_LCD);
+				}
+				else {
+					vramSetBankB(VRAM_B_MAIN_BG_0x06000000);
+					vramSetBankD(VRAM_D_LCD);
+				}
 			}
 			if (i == 1) {
 				// set up the new DISPCAPCNT to capture and render final!
@@ -591,12 +607,6 @@ void ProcessObjects() {
 				// change the display to display video, selecting VRAM target for capture mixing
 				REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
 				// applies to next *rendered* frame; i.e. frame we just set up to be rendered
-				if (multipassSecondaryBank) {
-					vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
-				}
-				else {
-					vramSetBankB(VRAM_B_MAIN_BG_0x06000000);
-				}
 				// set up bg to render over us
 				bgInit(3, BgType_Bmp16, BgSize_B16_256x256, 0, 0);
 				bgSetPriority(3, 0);
@@ -609,7 +619,7 @@ void ProcessObjects() {
 		multipassSecondaryBank = !multipassSecondaryBank;
 	}
 
-	glClearDepth(GL_MAX_DEPTH); // reset depth buffer, good idea to set to GL_MAX_DEPTH
+	glClearDepth(GL_MAX_DEPTH); // this technically only needs to be initialized once, but whatever, idc
 #else
 	// set up the camera
 	SetupCameraMatrix();
@@ -617,14 +627,16 @@ void ProcessObjects() {
 	while (currObject != NULL) {
 		if (currObject->mesh != NULL && !currObject->culled) {
 			if (currObject->mesh->skeletonCount != 0 && currObject->animator != NULL) {
-				RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator);
+				RenderModelRigged(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->animator, currObject->renderPriority);
 			}
 			else {
-				RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL);
+				RenderModel(currObject->mesh, &currObject->position, &currObject->scale, &currObject->rotation, NULL, currObject->renderPriority);
 			}
 		}
 		currObject = currObject->next;
 	}
+	// finally, render transparent models
+	RenderTransparentModels();
 	FinalizeSprites();
 	// update music
 	UpdateMusicBuffer();
@@ -644,11 +656,6 @@ void ProcessObjects() {
 			DestroyObjectInternal(tmpObj);
 		}
 	}
-
-	// finally, render transparent models
-#ifdef _NOTDS
-	RenderTransparentModels();
-#endif
 }
 
 int AddObjectType(void(*update)(Object*), void(*start)(Object*), bool(*collision)(Object*, CollisionHit*), void(*lateUpdate)(Object*), void(*destroy)(Object*), void(*networkCreateSend)(Object*, void**, int*),
@@ -668,7 +675,7 @@ int AddObjectType(void(*update)(Object*), void(*start)(Object*), bool(*collision
 	return retValue;
 }
 
-Object *CreateObject(int type, Vec3 *position, bool forced) {
+ITCM_CODE Object *CreateObject(int type, Vec3 *position, bool forced) {
 	if (!(forced || defaultNetInstance == NULL || (!defaultNetInstance->active || defaultNetInstance->host)) && networkedObjectTypes[type]) {
 		return NULL;
 	}
@@ -739,7 +746,7 @@ Object *CreateObject(int type, Vec3 *position, bool forced) {
 	return newObj;
 }
 
-void DestroyObject(Object *object) {
+ITCM_CODE void DestroyObject(Object *object) {
 	object->destroy = true;
 }
 
@@ -748,7 +755,7 @@ void AddCollisionBetweenLayers(int layer1, int layer2) {
 	layerCollision[layer1+(layer2*32)] = true;
 }
 
-void GetObjectPtr(Object* object, ObjectPtr* out) {
+ITCM_CODE void GetObjectPtr(Object* object, ObjectPtr* out) {
 	out->next = object->references.next;
 	out->prev = &object->references;
 	if (out->next != NULL) {
@@ -758,7 +765,7 @@ void GetObjectPtr(Object* object, ObjectPtr* out) {
 	out->object = object;
 }
 
-void FreeObjectPtr(ObjectPtr* ptr) {
+ITCM_CODE void FreeObjectPtr(ObjectPtr* ptr) {
 	// it's already been freed...
 	if (ptr->object == NULL) {
 		return;
@@ -770,7 +777,7 @@ void FreeObjectPtr(ObjectPtr* ptr) {
 	ptr->object = NULL;
 }
 
-void SyncObjectPacketSend(Object* object, void* data, int dataLen, unsigned short type, bool important) {
+ITCM_CODE void SyncObjectPacketSend(Object* object, void* data, int dataLen, unsigned short type, bool important) {
 	if (object->netId == -1 || !defaultNetInstance->active) return;
 	char* ou = (char*)malloc(dataLen + sizeof(int) * 3);
 	((int*)ou)[0] = object->netId;
@@ -783,7 +790,7 @@ void SyncObjectPacketSend(Object* object, void* data, int dataLen, unsigned shor
 	PacketSendAll(ou, dataLen + sizeof(int) * 3, objPacketId, important, defaultNetInstance);
 }
 
-void SyncObjectPacketReceive(void* data, int dataLen, int node, NetworkInstance* instance) {
+ITCM_CODE void SyncObjectPacketReceive(void* data, int dataLen, int node, NetworkInstance* instance) {
 	if (!instance->host) {
 		node = ((int*)data)[1];
 	}
@@ -809,7 +816,7 @@ void SyncObjectPacketReceive(void* data, int dataLen, int node, NetworkInstance*
 	}
 }
 
-void SyncObjectCreateReceive(void* data, int dataLen, int node, NetworkInstance* instance) {
+ITCM_CODE void SyncObjectCreateReceive(void* data, int dataLen, int node, NetworkInstance* instance) {
 	// host should authenticate all object creations!
 	if (instance->host) {
 		return;
@@ -865,7 +872,7 @@ void StopSyncingObject(Object* obj) {
 	obj->netId = -1;
 }
 
-void SyncAllObjects(int node) {
+ITCM_CODE void SyncAllObjects(int node) {
 	if (!defaultNetInstance->host) {
 		return;
 	}

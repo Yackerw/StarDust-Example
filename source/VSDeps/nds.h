@@ -7,6 +7,9 @@
 
 #define _NOTDS
 
+#define ITCM_CODE
+#define DTCM_DATA
+
 #define f32tofloat(value) ((value) / 4096.0f)
 #define floattof32(value) ((int)((value) * 4096))
 

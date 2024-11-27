@@ -76,11 +76,17 @@ int main() {
 	InitializeNetworking(1, 1);
 
 	InitializeSubBG();
+
+	//consoleDemoInit();
 	
 	// be sure to set up lighting
-	SetLightColor(RGB15(16, 16, 16));
-	SetAmbientColor(RGB15(8, 8, 8));
-	SetLightDir(0, -4096, 0);
+	SetLightColor(0, 16, 16, 16);
+	SetAmbientColor(8, 8, 8);
+	SetLightDir(0, 0, -4096, 0);
+	EnableLight(0);
+	EnableLight(1);
+	SetLightColor(1, 0, 16, 16);
+	SetLightDir(1, 0, 4096, 0);
 
 	// set up basic collision layers
 	AddCollisionBetweenLayers(1, 1);
@@ -100,10 +106,26 @@ int main() {
 	world->scale.z = world->mesh->defaultScale;
 	world->position = world->mesh->defaultOffset;
 	world->solid = true;
+	for (int i = 0; i < world->mesh->materialCount; ++i) {
+		world->mesh->defaultMats[i].stencilPack = 0x1;
+	}
 
 	Vec3 up = { 0, 4096, 0 };
 
 	Object* player = CreateObject(playerId, &up, false);
+
+	Vec3 cubeSpawn = { 4096, 0, 0 };
+
+	Object* cube = CreateObject(0, &cubeSpawn, false);
+	cube->mesh = LoadModel("nitro:/testcube0.sdm");
+	cube->mesh->defaultMats[0].stencilPack = 0x20;
+	cube->mesh->defaultMats[0].materialFlags0 = FRONT_CULLING;
+	cube->mesh->defaultMats[0].alpha = 0x0F;
+	//cubeSpawn.x = 4096 * 6;
+	cube = CreateObject(0, &cubeSpawn, false);
+	cube->mesh = LoadModel("nitro:/testcube1.sdm");
+	cube->mesh->defaultMats[0].stencilPack = 0x22;
+	cube->mesh->defaultMats[0].alpha = 0x0F;
 	
 	InitDeltaTime();
 	deltaTimeEngine = true;
@@ -114,12 +136,12 @@ int main() {
 
 	while (1) {
 		UpdateDeltaTime();
-		printf("%f\n", f32tofloat(deltaTime));
+		//printf("%f\n", f32tofloat(deltaTime));
 		UpdateInput();
 		
 		ProcessObjects();
 
-		//FinalizeSprites();
+		FinalizeSprites();
 
 		//printf("%i\n%i\n", GetTouchScreenX(TOUCH_ORIGIN_LEFT), GetTouchScreenY(TOUCH_ORIGIN_TOP));
 #ifdef _WIN32
