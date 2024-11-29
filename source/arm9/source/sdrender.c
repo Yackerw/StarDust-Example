@@ -1268,7 +1268,7 @@ ITCM_CODE void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quat
 		for (int i = 0; i < vertGroupCount; ++i) {
 			if (currVertexGroup->bitFlags & VTX_MATERIAL_CHANGE) {
 				transparentSkip = skipTransparentOrOpaque;
-				if (SetupMaterial(&mats[currVertexGroup->material], false)) {
+				if (SetupMaterial(&mats[currVertexGroup->material], true)) {
 					transparentSkip = !skipTransparentOrOpaque;
 					if (renderPriority != RENDER_PRIO_RESERVED) {
 						if (!modelQueued) {
@@ -1338,12 +1338,21 @@ ITCM_CODE void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quat
 		for (int i = 0; i < dsnm->FIFOCount; ++i) {
 			// uh oh!! we can free except the cache!! assume in order then!!
 			if (currVertexGroup == NULL) {
-				SetupMaterial(&mats[i], true);
+				transparentSkip = skipTransparentOrOpaque;
+				if (SetupMaterial(&mats[i], true)) {
+					transparentSkip = !skipTransparentOrOpaque;
+					if (renderPriority != RENDER_PRIO_RESERVED) {
+						if (!modelQueued) {
+							AppendDrawCall(model, position, scale, rotation, mats, animator, renderPriority);
+						}
+						continue;
+					}
+				}
 			}
 			else {
 				if (currVertexGroup->bitFlags & VTX_MATERIAL_CHANGE) {
 					transparentSkip = skipTransparentOrOpaque;
-					if (SetupMaterial(&mats[currVertexGroup->material], false)) {
+					if (SetupMaterial(&mats[currVertexGroup->material], true)) {
 						transparentSkip = !skipTransparentOrOpaque;
 						if (renderPriority != RENDER_PRIO_RESERVED) {
 							if (!modelQueued) {
@@ -1356,6 +1365,9 @@ ITCM_CODE void RenderModelRigged(Model *model, Vec3 *position, Vec3 *scale, Quat
 				}
 			}
 			if (transparentSkip) {
+				if (currVertexGroup != NULL) {
+					currVertexGroup = (VertexHeader*)((uint32_t)(&(currVertexGroup->vertices)) + (uint32_t)(sizeof(Vertex) * (currVertexGroup->count)));
+				}
 				continue;
 			}
 			if (dsnm->FIFOBatches[i] != NULL) {
@@ -1453,15 +1465,21 @@ ITCM_CODE void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion
 		}
 	 }
 	else {
-		for (int i = 0; i < model->skeletonCount; ++i) {
-			glPushMatrix();
-			glRestoreMatrix(0);
-		}
 		DSNativeModel* dsnm = model->NativeModel;
 		for (int i = 0; i < dsnm->FIFOCount; ++i) {
 			// uh oh!! we can free except the cache!! assume in order then!!
 			if (currVertexGroup == NULL) {
-				SetupMaterial(&mats[i], false);
+				transparentSkip = skipTransparentOrOpaque;
+				if (SetupMaterial(&mats[i], false)) {
+					transparentSkip = !skipTransparentOrOpaque;
+					if (renderPriority != RENDER_PRIO_RESERVED) {
+						if (!modelQueued) {
+							AppendDrawCall(model, position, scale, rotation, mats, NULL, renderPriority);
+							modelQueued = true;
+						}
+						continue;
+					}
+				}
 			}
 			else {
 				if (currVertexGroup->bitFlags & VTX_MATERIAL_CHANGE) {
@@ -1479,7 +1497,12 @@ ITCM_CODE void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion
 					}
 				}
 			}
-			if (transparentSkip) continue;
+			if (transparentSkip) {
+				if (currVertexGroup != NULL) {
+					currVertexGroup = (VertexHeader*)((uint32_t)(&(currVertexGroup->vertices)) + (uint32_t)(sizeof(Vertex) * (currVertexGroup->count)));
+				}
+				continue;
+			}
 			if (dsnm->FIFOBatches[i] != NULL) {
 				//glCallList((u32*)dsnm->FIFOBatches[i]);
 				DrawList((unsigned int*)dsnm->FIFOBatches[i]);
@@ -1488,7 +1511,6 @@ ITCM_CODE void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion
 				currVertexGroup = (VertexHeader*)((uint32_t)(&(currVertexGroup->vertices)) + (uint32_t)(sizeof(Vertex) * (currVertexGroup->count)));
 			}
 		}
-		glPopMatrix(model->skeletonCount);
 	}
 }
 
