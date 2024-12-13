@@ -1066,73 +1066,75 @@ ITCM_CODE bool SetupMaterial(SDMaterial* mat, bool rigged) {
 		}
 		// allow light overrides to occur
 		// reset matrix because for SOME REASON the light is rotated by that when set up
-		glMatrixMode(GL_MODELVIEW);
-		if (rigged) {
-			glLoadIdentity();
-		}
-		else {
-			glPushMatrix();
-			glLoadIdentity();
-		}
+		if (mat->lightingFlags & LIGHT_OVERRIDEMASK) {
+			glMatrixMode(GL_MODELVIEW);
+			if (rigged) {
+				glLoadIdentity();
+			}
+			else {
+				glPushMatrix();
+				glLoadIdentity();
+			}
 
-		if (mat->lightingFlags & LIGHT_OVERRIDE0) {
-			flags |= 1;
-			glLight(0, mat->lightOverride0, (mat->lightNormal0 & 0x1F) * 32, ((mat->lightNormal0 >> 5) & 0x1F) * 32, ((mat->lightNormal0 >> 10) & 0x1F) * 32);
-			lightsDirty[0] = true;
-		}
-		else {
-			if (lightsDirty[0]) {
-				glLight(0, lightColor[0], lightNormal[0].x, lightNormal[0].y, lightNormal[0].z);
-				lightsDirty[0] = false;
+			if (mat->lightingFlags & LIGHT_OVERRIDE0) {
+				flags |= 1;
+				glLight(0, mat->lightOverride0, (mat->lightNormal0 & 0x1F) * 32, ((mat->lightNormal0 >> 5) & 0x1F) * 32, ((mat->lightNormal0 >> 10) & 0x1F) * 32);
+				lightsDirty[0] = true;
 			}
-		}
-		if (mat->lightingFlags & LIGHT_OVERRIDE1) {
-			flags |= 2;
-			glLight(1, mat->lightOverride1, (mat->lightNormal1 & 0x1F) * 32, ((mat->lightNormal1 >> 5) & 0x1F) * 32, ((mat->lightNormal1 >> 10) & 0x1F) * 32);
-			lightsDirty[1] = true;
-		}
-		else {
-			if (lightsDirty[1]) {
-				glLight(1, lightColor[1], lightNormal[1].x, lightNormal[1].y, lightNormal[1].z);
-				lightsDirty[1] = false;
+			else {
+				if (lightsDirty[0]) {
+					glLight(0, lightColor[0], lightNormal[0].x, lightNormal[0].y, lightNormal[0].z);
+					lightsDirty[0] = false;
+				}
 			}
-		}
-		if (mat->lightingFlags & LIGHT_OVERRIDE2) {
-			flags |= 4;
-			// hell world backwards compatibility with materials
-			unsigned short currLightNormal = mat->lightNormal2Pt0 | (mat->lightNormal2Pt1 << 8);
-			glLight(2, mat->lightOverride2, (currLightNormal & 0x1F) * 32, ((currLightNormal >> 5) & 0x1F) * 32, ((currLightNormal >> 10) & 0x1F) * 32);
-			lightsDirty[2] = true;
-		}
-		else {
-			if (lightsDirty[2]) {
-				glLight(2, lightColor[2], lightNormal[2].x, lightNormal[2].y, lightNormal[2].z);
-				lightsDirty[3] = false;
+			if (mat->lightingFlags & LIGHT_OVERRIDE1) {
+				flags |= 2;
+				glLight(1, mat->lightOverride1, (mat->lightNormal1 & 0x1F) * 32, ((mat->lightNormal1 >> 5) & 0x1F) * 32, ((mat->lightNormal1 >> 10) & 0x1F) * 32);
+				lightsDirty[1] = true;
 			}
-		}
-		if (mat->lightingFlags & LIGHT_OVERRIDE3) {
-			flags |= 8;
-			// hell world backwards compatibility with materials
-			unsigned short currLightNormal = mat->lightNormal3Pt0 | (mat->lightNormal3Pt1 << 8);
-			glLight(3, mat->lightOverride3, (currLightNormal & 0x1F) * 32, ((currLightNormal >> 5) & 0x1F) * 32, ((currLightNormal >> 10) & 0x1F) * 32);
-			lightsDirty[3] = true;
-		}
-		else {
-			if (lightsDirty[3]) {
-				glLight(3, lightColor[3], lightNormal[3].x, lightNormal[3].y, lightNormal[3].z);
-				lightsDirty[3] = false;
+			else {
+				if (lightsDirty[1]) {
+					glLight(1, lightColor[1], lightNormal[1].x, lightNormal[1].y, lightNormal[1].z);
+					lightsDirty[1] = false;
+				}
 			}
-		}
+			if (mat->lightingFlags & LIGHT_OVERRIDE2) {
+				flags |= 4;
+				// hell world backwards compatibility with materials
+				unsigned short currLightNormal = mat->lightNormal2Pt0 | (mat->lightNormal2Pt1 << 8);
+				glLight(2, mat->lightOverride2, (currLightNormal & 0x1F) * 32, ((currLightNormal >> 5) & 0x1F) * 32, ((currLightNormal >> 10) & 0x1F) * 32);
+				lightsDirty[2] = true;
+			}
+			else {
+				if (lightsDirty[2]) {
+					glLight(2, lightColor[2], lightNormal[2].x, lightNormal[2].y, lightNormal[2].z);
+					lightsDirty[3] = false;
+				}
+			}
+			if (mat->lightingFlags & LIGHT_OVERRIDE3) {
+				flags |= 8;
+				// hell world backwards compatibility with materials
+				unsigned short currLightNormal = mat->lightNormal3Pt0 | (mat->lightNormal3Pt1 << 8);
+				glLight(3, mat->lightOverride3, (currLightNormal & 0x1F) * 32, ((currLightNormal >> 5) & 0x1F) * 32, ((currLightNormal >> 10) & 0x1F) * 32);
+				lightsDirty[3] = true;
+			}
+			else {
+				if (lightsDirty[3]) {
+					glLight(3, lightColor[3], lightNormal[3].x, lightNormal[3].y, lightNormal[3].z);
+					lightsDirty[3] = false;
+				}
+			}
 
-		if (!rigged) {
-			glPopMatrix(1);
+			if (!rigged) {
+				glPopMatrix(1);
+			}
 		}
 		int diffR = mat->colorR * ambientColor.x;
 		int diffG = mat->colorG * ambientColor.y;
 		int diffB = mat->colorB * ambientColor.z;
-		diffR = diffR ? ((diffR + 1) >> 5) : 0;
-		diffG = diffG ? ((diffG + 1) >> 5) : 0;
-		diffB = diffB ? ((diffB + 1) >> 5) : 0;
+		diffR = diffR ? ((diffR >> 5) + 1) : 0;
+		diffG = diffG ? ((diffG >> 5) + 1) : 0;
+		diffB = diffB ? ((diffB >> 5) + 1) : 0;
 		diffR += mat->emissionR;
 		diffG += mat->emissionG;
 		diffB += mat->emissionB;
@@ -1159,6 +1161,35 @@ ITCM_CODE bool SetupMaterial(SDMaterial* mat, bool rigged) {
 	if (currTex != NULL) {
 		GFX_TEX_FORMAT = currTex->textureWrite; // this is a minor optimization, but glBindTexture and glAssignColorTable accounted for about half the call time for material setup, and material setup needs to be called a lot.
 		GFX_PAL_FORMAT = currTex->paletteWrite;
+		glMatrixMode(GL_TEXTURE);
+		if (mat->materialFlags0 & TEXTURE_TRANSFORM) {
+			// TODO: change to a m4x3?
+			m4x4 textureMatrix;
+			f32 c = cosLerp(mat->texRotation);
+			f32 s = sinLerp(mat->texRotation);
+			textureMatrix.m[r1x] = mulf32(c, mat->texScaleX);
+			textureMatrix.m[r2x] = mulf32(s, mat->texScaleX);
+			textureMatrix.m[r1y] = mulf32(-s, mat->texScaleY);
+			textureMatrix.m[r2y] = mulf32(c, mat->texScaleY);
+			// this must be multiplied by 16, because that's how the gpu handles it for some reason
+			textureMatrix.m[r1w] = mat->texOffsX * 16;
+			textureMatrix.m[r2w] = mat->texOffsY * 16;
+			textureMatrix.m[r1z] = 0;
+			textureMatrix.m[r2z] = 0;
+			textureMatrix.m[r3x] = 0;
+			textureMatrix.m[r3y] = 0;
+			textureMatrix.m[r3z] = 0;
+			textureMatrix.m[r3w] = 0;
+			textureMatrix.m[r4x] = 0;
+			textureMatrix.m[r4y] = 0;
+			textureMatrix.m[r4z] = 0;
+			textureMatrix.m[r4w] = 0;
+			glLoadMatrix4x4(&textureMatrix);
+		}
+		else {
+			glLoadIdentity();
+		}
+		glMatrixMode(GL_MODELVIEW);
 		isTransparent = isTransparent || currTex->type == GL_RGB32_A3 || currTex->type == GL_RGB8_A5;
 	}
 	else {
@@ -1988,7 +2019,6 @@ void RenderStencilPC(Material *renderMat, Mesh* nativeModel, SubMesh *subMesh, b
 			// on DS, transparents will always stencil each other out
 			glStencilFunc(GL_NOTEQUAL, stencilValue + 0x20, 0x3F);
 			glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-			renderMat->transparent = false;
 			RenderSubMesh(nativeModel, renderMat, subMesh[0], &renderMat->mainShader);
 		}
 	}
@@ -2107,6 +2137,65 @@ void SetupLightOverridesPC(SDMaterial *mat, Vec3f *lightCol, Vec4f *lightDir, Ve
 	}
 }
 
+void SetupPerMaterialData(SDMaterial* mat, Material* renderMat) {
+	if (mat->texture != NULL) {
+		SetMaterialNativeTexture(renderMat, "mainTexture", mat->texture->nativeTexture);
+	}
+	// set up diffuse color
+	Vec4f* diffColor = (Vec4f*)malloc(sizeof(Vec4f));
+	diffColor->x = mat->colorR / 31.0f;
+	diffColor->y = mat->colorG / 31.0f;
+	diffColor->z = mat->colorB / 31.0f;
+	diffColor->w = mat->alpha / 31.0f;
+	SetMaterialUniform(renderMat, "diffColor", diffColor);
+	renderMat->backFaceCulling = (mat->materialFlags0 & CULLING_MASK) == BACK_CULLING;
+	renderMat->frontFaceCulling = (mat->materialFlags0 & CULLING_MASK) == FRONT_CULLING;
+	int* unlit = malloc(sizeof(int));
+	unlit[0] = 0;
+	if (!(mat->lightingFlags & LIGHT_ENABLE)) {
+		unlit[0] = 1;
+	}
+	SetMaterialUniform(renderMat, "unlit", unlit);
+
+	// set up emissive
+	Vec3f* emissive = (Vec3f*)malloc(sizeof(Vec3f));
+	SetMaterialUniform(renderMat, "emissive", emissive);
+	emissive->x = mat->emissionR / 31.0f;
+	emissive->y = mat->emissionG / 31.0f;
+	emissive->z = mat->emissionB / 31.0f;
+
+	// UV matrix
+	m4x4 *UVMatrix = (m4x4*)malloc(sizeof(m4x4));
+	if (mat->materialFlags0 & TEXTURE_TRANSFORM) {
+		f32 c = cosLerp(mat->texRotation);
+		f32 s = sinLerp(mat->texRotation);
+		UVMatrix->mf[r1x] = f32tofloat(mulf32(c, mat->texScaleX));
+		UVMatrix->mf[r1y] = f32tofloat(mulf32(-s, mat->texScaleY));
+		UVMatrix->mf[r2x] = f32tofloat(mulf32(s, mat->texScaleX));
+		UVMatrix->mf[r2y] = f32tofloat(mulf32(c, mat->texScaleY));
+		UVMatrix->mf[r1w] = f32tofloat(mat->texOffsX);
+		UVMatrix->mf[r2w] = f32tofloat(mat->texOffsY);
+		UVMatrix->mf[r1z] = 0;
+		UVMatrix->mf[r2z] = 0;
+		UVMatrix->mf[r3x] = 0;
+		UVMatrix->mf[r3y] = 0;
+		UVMatrix->mf[r3z] = 0;
+		UVMatrix->mf[r3w] = 0;
+		UVMatrix->mf[r4x] = 0;
+		UVMatrix->mf[r4y] = 0;
+		UVMatrix->mf[r4z] = 0;
+		UVMatrix->mf[r4w] = 0;
+	}
+	else {
+		for (int i = 0; i < 16; ++i) {
+			UVMatrix->mf[i] = 0;
+		}
+		UVMatrix->mf[r1x] = 1.0f;
+		UVMatrix->mf[r2y] = 1.0f;
+	}
+	SetMaterialUniform(renderMat, "UVMatrix", UVMatrix);
+}
+
 void RenderModel(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation, SDMaterial* mats, int renderPriority) {
 	if (mats == NULL) {
 		mats = model->defaultMats;
@@ -2176,9 +2265,6 @@ void RenderModel(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation
 	ambient->z = ambientColor.z / 31.0f;
 	SetMaterialUniform(&renderMat, "ambient", ambient);
 
-	Vec3f* emissive = (Vec3f*)malloc(sizeof(Vec3f));
-	SetMaterialUniform(&renderMat, "emissive", emissive);
-
 	for (int i = 0; i < model->materialCount; ++i) {
 		// queue up transparencies...
 		if ((mats[i].texture != NULL && (mats[i].texture->type == 1 || mats[i].texture->type == 6)) || mats[i].alpha < 31 || (mats[i].stencilPack & STENCIL_FORCE_OPAQUE_ORDERING) != 0) {
@@ -2198,29 +2284,7 @@ void RenderModel(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation
 		}
 		else {
 			// some per-material data...
-			if (mats[i].texture != NULL) {
-				SetMaterialNativeTexture(&renderMat, "mainTexture", mats[i].texture->nativeTexture);
-			}
-			// set up diffuse color
-			Vec4f* diffColor = (Vec4f*)malloc(sizeof(Vec4f));
-			diffColor->x = mats[i].colorR / 31.0f;
-			diffColor->y = mats[i].colorG / 31.0f;
-			diffColor->z = mats[i].colorB / 31.0f;
-			diffColor->w = mats[i].alpha / 31.0f;
-			SetMaterialUniform(&renderMat, "diffColor", diffColor);
-			renderMat.backFaceCulling = (mats[i].materialFlags0 & CULLING_MASK) == BACK_CULLING;
-			renderMat.frontFaceCulling = (mats[i].materialFlags0 & CULLING_MASK) == FRONT_CULLING;
-			int* unlit = malloc(sizeof(int));
-			unlit[0] = 0;
-			if (!(mats[i].lightingFlags & LIGHT_ENABLE)) {
-				unlit[0] = 1;
-			}
-			SetMaterialUniform(&renderMat, "unlit", unlit);
-
-			// set up emissive
-			emissive->x = mats[i].emissionR / 31.0f;
-			emissive->y = mats[i].emissionG / 31.0f;
-			emissive->z = mats[i].emissionB / 31.0f;
+			SetupPerMaterialData(&mats[i], &renderMat);
 
 			// handle light overrides
 			SetupLightOverridesPC(&mats[i], lightCol, lightDir, lightColLocal, lightDirLocal);
@@ -2307,9 +2371,6 @@ void RenderModelRigged(Model* model, Vec3* position, Vec3* scale, Quaternion* ro
 	ambient->z = ambientColor.z / 31.0f;
 	SetMaterialUniform(&renderMat, "ambient", ambient);
 
-	Vec3f* emissive = (Vec3f*)malloc(sizeof(Vec3f));
-	SetMaterialUniform(&renderMat, "emissive", emissive);
-
 	// bone matrices!
 	m4x4* boneMatrices = (m4x4*)malloc(sizeof(m4x4) * 128);
 	for (int i = 0; i < animator->itemCount; ++i) {
@@ -2371,31 +2432,10 @@ void RenderModelRigged(Model* model, Vec3* position, Vec3* scale, Quaternion* ro
 		}
 		else {
 			// some per-material data...
-			if (mats[i].texture != NULL) {
-				SetMaterialNativeTexture(&renderMat, "mainTexture", mats[i].texture->nativeTexture);
-			}
-			// set up diffuse color
-			Vec4f* diffColor = (Vec4f*)malloc(sizeof(Vec4f));
-			diffColor->x = mats[i].colorR / 31.0f;
-			diffColor->y = mats[i].colorG / 31.0f;
-			diffColor->z = mats[i].colorB / 31.0f;
-			diffColor->w = mats[i].alpha / 31.0f;
-			SetMaterialUniform(&renderMat, "diffColor", diffColor);
-			renderMat.backFaceCulling = (mats[i].materialFlags0 & CULLING_MASK) == BACK_CULLING;
-			renderMat.frontFaceCulling = (mats[i].materialFlags0 & CULLING_MASK) == FRONT_CULLING;
-			int* unlit = malloc(sizeof(int));
-			unlit[0] = 0;
-			if (!(mats[i].lightingFlags & LIGHT_ENABLE)) {
-				unlit[0] = 1;
-			}
+			SetupPerMaterialData(&mats[i], &renderMat);
 
 			// handle light overrides
 			SetupLightOverridesPC(&mats[i], lightCol, lightDir, lightColLocal, lightDirLocal);
-
-			// set up emissive
-			emissive->x = mats[i].emissionR / 31.0f;
-			emissive->y = mats[i].emissionG / 31.0f;
-			emissive->z = mats[i].emissionB / 31.0f;
 
 			// set up stencil
 			if ((mats[i].stencilPack & STENCIL_SHADOW_COMPARE_WRITE) != 0) {
@@ -2515,31 +2555,11 @@ void RenderModelTransparent(ModelDrawCall* call) {
 		SetMaterialUniform(&renderMat, "boneMatrices", boneMatrices);
 	}
 
-	if (call->subMat.texture != NULL) {
-		SetMaterialNativeTexture(&renderMat, "mainTexture", call->subMat.texture->nativeTexture);
-	}
-	// set up diffuse color
-	Vec4f* diffColor = (Vec4f*)malloc(sizeof(Vec4f));
-	diffColor->x = call->subMat.colorR / 31.0f;
-	diffColor->y = call->subMat.colorG / 31.0f;
-	diffColor->z = call->subMat.colorB / 31.0f;
-	diffColor->w = call->subMat.alpha / 31.0f;
-	SetMaterialUniform(&renderMat, "diffColor", diffColor);
-	renderMat.backFaceCulling = (call->subMat.materialFlags0 & CULLING_MASK) == BACK_CULLING;
-	renderMat.frontFaceCulling = (call->subMat.materialFlags0 & CULLING_MASK) == FRONT_CULLING;
-	int* unlit = malloc(sizeof(int));
-	unlit[0] = 0;
-	if (!(call->subMat.lightingFlags & LIGHT_ENABLE)) {
-		unlit[0] = 1;
-	}
+	// some per-material data...
+	SetupPerMaterialData(&call->subMat, &renderMat);
 
 	// handle light overrides
 	SetupLightOverridesPC(&call->subMat, lightCol, lightDir, lightColLocal, lightDirLocal);
-
-	// set up emissive
-	emissive->x = call->subMat.emissionR / 31.0f;
-	emissive->y = call->subMat.emissionG / 31.0f;
-	emissive->z = call->subMat.emissionB / 31.0f;
 
 	// technically, we now use this for stencil ordered opaques as well, so...
 	if (!(call->subMat.alpha == 31 && call->subMat.texture->type != 6 && call->subMat.texture->type != 1)) {
@@ -3697,7 +3717,7 @@ void SetupCameraMatrix() {
 #endif
 
 #ifdef _NOTDS
-f32 DotProduct4(Vec4* left, Vec4* right) {
+float DotProduct4(Vec4* left, Vec4* right) {
 	return (f32tofloat(left->x) * f32tofloat(right->x)) + (f32tofloat(left->y) * f32tofloat(right->y)) + (f32tofloat(left->z) * f32tofloat(right->z)) + (f32tofloat(left->w) * f32tofloat(right->w));
 }
 #endif

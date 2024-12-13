@@ -43,11 +43,17 @@ typedef struct {
 	Vec3* position;
 	Vec3 extents;
 	Quaternion* rotation;
+	f32 cachedMagnitude;
 } CollisionBox;
+
+typedef struct {
+	int count;
+	Vec3 points[5];
+} Simplex;
 
 bool SphereOnTriangleLine(CollisionSphere *sphere, CollisionTriangle *tri, Vec3 *normal, f32 *penetration);
 
-bool SphereOnTriangleVertex(CollisionSphere *sphere, CollisionTriangle *tri, Vec3 *normal, f32 *penetration);
+bool SphereOnTriangleVertex(CollisionSphere* sphere, f32 sphereSquareMagnitude, CollisionTriangle* tri, Vec3* normal, f32* penetration);
 
 bool SphereOnTrianglePlane(CollisionSphere *sphere, CollisionTriangle *tri, Vec3 *normal, f32 *penetration, bool *onPlane);
 
@@ -72,5 +78,8 @@ bool RayOnTriangle(Vec3* point, Vec3* direction, CollisionTriangle* triangle, f3
 bool RayOnMesh(Vec3* point, Vec3* direction, f32 length, Vec3* rayMin, Vec3* rayMax, MeshCollider* mesh, Vec3* meshOffset, Vec3* meshScale, Quaternion* meshRotation, f32* t, Vec3* hitPos, Vec3* normal, int* triId);
 
 bool SphereOnOBB(CollisionSphere* sphere, CollisionBox* box, Vec3* hitPos, Vec3* normal, f32* t);
+
+bool BasicGJK(void* shape1, void* shape2, Vec3* normalBetweenShape1Shape2, Simplex* outputSimplex,
+	Vec3(*findPointSupport1)(void* shape, Vec3* normal), Vec3(*findPointSupport2)(void* shape, Vec3* normal));
 
 #endif

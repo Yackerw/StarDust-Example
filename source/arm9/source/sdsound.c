@@ -468,16 +468,16 @@ void MixByte(PlayingSoundData* currSound, short* output, const int samplesToWrit
 			}
 		}
 		if (stereo) {
-			output[i] = iClamp(output[i] + (((127 - currSound->sound->samples[(((int)currSound->soundPosition) / 2) * 2]) * 256) * leftVolume), -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + (((127 - currSound->sound->samples[(((int)currSound->soundPosition) / 2) * 2 + 1]) * 256) * rightVolume), -32768, 32767);
+			output[i] = Clamp(output[i] + (((127 - currSound->sound->samples[(((int)currSound->soundPosition) / 2) * 2]) * 256) * leftVolume), -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + (((127 - currSound->sound->samples[(((int)currSound->soundPosition) / 2) * 2 + 1]) * 256) * rightVolume), -32768, 32767);
 			currSound->soundPosition += incrementor + incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd * 2 && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart * 2;
 			}
 		}
 		else {
-			output[i] = iClamp(output[i] + (((127 - currSound->sound->samples[(int)currSound->soundPosition]) * 256) * leftVolume), -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + (((127 - currSound->sound->samples[(int)currSound->soundPosition]) * 256) * rightVolume), -32768, 32767);
+			output[i] = Clamp(output[i] + (((127 - currSound->sound->samples[(int)currSound->soundPosition]) * 256) * leftVolume), -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + (((127 - currSound->sound->samples[(int)currSound->soundPosition]) * 256) * rightVolume), -32768, 32767);
 			currSound->soundPosition += incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart;
@@ -506,16 +506,16 @@ void MixShort(PlayingSoundData* currSound, short* output, const int samplesToWri
 			}
 		}
 		if (stereo) {
-			output[i] = iClamp(output[i] + (currSound->sound->shortSamples[(((int)currSound->soundPosition) / 2) * 2] * leftVolume), -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + (currSound->sound->shortSamples[(((int)currSound->soundPosition) / 2) * 2 + 1] * rightVolume), -32768, 32767);
+			output[i] = Clamp(output[i] + (currSound->sound->shortSamples[(((int)currSound->soundPosition) / 2) * 2] * leftVolume), -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + (currSound->sound->shortSamples[(((int)currSound->soundPosition) / 2) * 2 + 1] * rightVolume), -32768, 32767);
 			currSound->soundPosition += incrementor + incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd * 2 && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart * 2;
 			}
 		}
 		else {
-			output[i] = iClamp(output[i] + (currSound->sound->shortSamples[(int)currSound->soundPosition] * leftVolume), -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + (currSound->sound->shortSamples[(int)currSound->soundPosition] * rightVolume), -32768, 32767);
+			output[i] = Clamp(output[i] + (currSound->sound->shortSamples[(int)currSound->soundPosition] * leftVolume), -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + (currSound->sound->shortSamples[(int)currSound->soundPosition] * rightVolume), -32768, 32767);
 			currSound->soundPosition += incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart;
@@ -547,8 +547,8 @@ void MixByteStreamed(PlayingSoundData* currSound, short* output, const int sampl
 			fseek(currSound->sound->streamFile, currSound->soundPosition + currSound->sound->fOffset, SEEK_SET);
 			unsigned char inputAudio[2];
 			fread(inputAudio, 2, 1, currSound->sound->streamFile);
-			output[i] = iClamp(output[i] + (((127 - inputAudio[0]) * 256) * leftVolume), -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + (((127 - inputAudio[1]) * 256) * rightVolume), -32768, 32767);
+			output[i] = Clamp(output[i] + (((127 - inputAudio[0]) * 256) * leftVolume), -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + (((127 - inputAudio[1]) * 256) * rightVolume), -32768, 32767);
 			currSound->soundPosition += incrementor + incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd * 2 && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart * 2;
@@ -558,8 +558,8 @@ void MixByteStreamed(PlayingSoundData* currSound, short* output, const int sampl
 			fseek(currSound->sound->streamFile, currSound->soundPosition + currSound->sound->fOffset, SEEK_SET);
 			unsigned char inputAudio[2];
 			fread(inputAudio, 1, 1, currSound->sound->streamFile);
-			output[i] = iClamp(output[i] + (((127 - inputAudio[0]) * 256) * leftVolume), -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + (((127 - inputAudio[0]) * 256) * rightVolume), -32768, 32767);
+			output[i] = Clamp(output[i] + (((127 - inputAudio[0]) * 256) * leftVolume), -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + (((127 - inputAudio[0]) * 256) * rightVolume), -32768, 32767);
 			currSound->soundPosition += incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart;
@@ -591,8 +591,8 @@ void MixShortStreamed(PlayingSoundData* currSound, short* output, const int samp
 			fseek(currSound->sound->streamFile, currSound->soundPosition * 2 + currSound->sound->fOffset, SEEK_SET);
 			short inputAudio[2];
 			fread(inputAudio, 4, 1, currSound->sound->streamFile);
-			output[i] = iClamp(output[i] + inputAudio[0] * leftVolume, -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + 127 - inputAudio[1] * rightVolume, -32768, 32767);
+			output[i] = Clamp(output[i] + inputAudio[0] * leftVolume, -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + 127 - inputAudio[1] * rightVolume, -32768, 32767);
 			currSound->soundPosition += incrementor + incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd * 2 && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart * 2;
@@ -602,8 +602,8 @@ void MixShortStreamed(PlayingSoundData* currSound, short* output, const int samp
 			fseek(currSound->sound->streamFile, currSound->soundPosition * 2 + currSound->sound->fOffset, SEEK_SET);
 			short inputAudio[2];
 			fread(inputAudio, 2, 1, currSound->sound->streamFile);
-			output[i] = iClamp(output[i] + inputAudio[0] * leftVolume, -32768, 32767);
-			output[i + 1] = iClamp(output[i + 1] + inputAudio[0] * rightVolume, -32768, 32767);
+			output[i] = Clamp(output[i] + inputAudio[0] * leftVolume, -32768, 32767);
+			output[i + 1] = Clamp(output[i + 1] + inputAudio[0] * rightVolume, -32768, 32767);
 			currSound->soundPosition += incrementor;
 			if (currSound->soundPosition >= currSound->loopEnd && currSound->loopEnd != 0) {
 				currSound->soundPosition = currSound->loopStart;

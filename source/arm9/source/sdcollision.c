@@ -8,6 +8,8 @@
 // enable this to reserve DTCM to speed up collision code
 #define COLLISION_DTCM
 #define COLLISION_DTCM_SIZE 0x800 // reserve 0x800 shorts for collision DTCM data; or, in other words, 4 KB out of the 16 available
+
+#define GJK_LENIENCY 16
 // note: barely noticeable slowdown from this, and fixes a bug with large polygons
 #define FLOATBARY
 //#define BARY64
@@ -149,11 +151,11 @@ ITCM_CODE Vec3 BarycentricCoords(CollisionTriangle *tri, Vec3 *point) {
 	#endif
 }
 
-ITCM_CODE bool SphereOnPoint(CollisionSphere *sphere, Vec3 *point, f32 *penetration) {
+ITCM_CODE bool SphereOnPoint(CollisionSphere *sphere, f32 sphereSquareMagnitude, Vec3 *point, f32 *penetration) {
 	Vec3 distance;
 	Vec3Subtraction(sphere->position, point, &distance);
 	f32 mag = SqrMagnitude(&distance);
-	if (mag < mulf32(sphere->radius, sphere->radius)) {
+	if (mag < sphereSquareMagnitude) {
 		*penetration = sphere->radius - sqrtf32(mag);
 		return true;
 	}
@@ -225,12 +227,13 @@ ITCM_CODE bool SphereOnTriangleLine(CollisionSphere *sphere, CollisionTriangle *
 	return false;
 }
 
-ITCM_CODE bool SphereOnTriangleVertex(CollisionSphere *sphere, CollisionTriangle *tri, Vec3 *normal, f32 *penetration) {
+ITCM_CODE bool SphereOnTriangleVertex(CollisionSphere *sphere, f32 sphereSquareMagnitude, CollisionTriangle *tri, Vec3 *normal, f32 *penetration) {
 	for (int i = 0; i < 3; ++i) {
 		f32 pointMag;
 		Vec3 v;
 		ShortToVec3(tri->verts[i], v);
-		if (SphereOnPoint(sphere, &v, &pointMag)) {
+		// TODO: cache sphere square radius so we aren't recalculating it every time. that 64 bit multiply isn't cheap!
+		if (SphereOnPoint(sphere, sphereSquareMagnitude, &v, &pointMag)) {
 			// get penetration and normal
 			*penetration = pointMag;
 			// normal; subtract the two vectors, then normalize
@@ -240,10 +243,6 @@ ITCM_CODE bool SphereOnTriangleVertex(CollisionSphere *sphere, CollisionTriangle
 		}
 	}
 	return false;
-}
-
-ITCM_CODE long long dot64_2(long long x1, long long y1, long long z1, long long x2, long long y2, long long z2) {
-	return mulf64(x1, x2) + mulf64(y1, y2) + mulf64(z1, z2);
 }
 
 ITCM_CODE bool SphereOnTrianglePlane(CollisionSphere *sphere, CollisionTriangle *tri, Vec3 *normal, f32 *penetration, bool *onPlane) {
@@ -668,6 +667,8 @@ ITCM_CODE void FindTrianglesFromOctreeInternal(Vec3* min, Vec3* max, MeshCollide
 			if (AABBCheck(min, max, &vMin, &vMax)) {
 				// omit duplicates
 				bool toContinue = false;
+				// this DEFINITELY needs some form of optimization. iterating over the whole thing is garbage. allocating ANY extra memory is likely slower, though, so i'm unsure how to approach.
+				// form the data into a binary tree instead? though i fear that to be harder to read back
 				for (int j = 0; j < *currSize; ++j) {
 					if (retValue[0][j] == block->triangleList[i]) {
 						toContinue = true;
@@ -866,7 +867,8 @@ ITCM_CODE bool RayOnSphere(Vec3* point, Vec3* direction, CollisionSphere* sphere
 }
 
 ITCM_CODE bool RayOnPlane(Vec3* point, Vec3* direction, Vec3* normal, f32 planeDistance, f32* t, Vec3* hitPos) {
-	f32 nd = DotProduct(direction, normal);
+	// two normals, can safely not use 64 bit here
+	f32 nd = DotProductNormal(direction, normal);
 	f32 pn = DotProduct(point, normal);
 	// if nd is positive, they're facing the same way. no collision
 	if (nd >= 0) {
@@ -1213,5 +1215,367 @@ ITCM_CODE bool SphereOnOBB(CollisionSphere* sphere, CollisionBox* box, Vec3* hit
 		*normal = tmpNormal;
 		return true;
 	}
+	return false;
+}
+
+void TripleCrossProduct(Vec3* a, Vec3* b, Vec3* c, Vec3* out) {
+	Vec3 work;
+	CrossProduct(a, b, &work);
+	CrossProduct(&work, c, out);
+}
+
+f32 LineDistFromOrigin(Vec3 *d, Vec3 *a, Vec3 *b) {
+	// a lot of magnitudes here...actually largely slower because of the 64 bit math rather than sqrts...
+	f32 t = -DotProduct(a, d);
+	t = divf32(t, Magnitude(d));
+
+	if (t <= 0) {
+		// off the line from a
+		return Magnitude(a);
+	}
+	else if (t >= 4096) {
+		// off the line from b
+		return Magnitude(b);
+	}
+	else {
+		Vec3 work;
+		work.x = mulf32(d->x, t);
+		work.y = mulf32(d->y, t);
+		work.z = mulf32(d->z, t);
+		Vec3Addition(&work, a, &work);
+		return Magnitude(&work);
+	}
+}
+
+f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c) {
+
+	Vec3 d0, d1, d2;
+
+	Vec3Subtraction(b, a, &d1);
+	Vec3Subtraction(c, a, &d2);
+
+	d0.x = -a->x;
+	d0.y = -a->y;
+	d0.z = -a->z;
+
+	// specialized barycentric coordinates...
+	f32 d11 = SqrMagnitude(&d1);
+	f32 d22 = SqrMagnitude(&d2);
+	f32 d01 = DotProduct(&d0, &d1);
+	f32 d20 = DotProduct(&d2, &d0);
+	f32 d21 = DotProduct(&d2, &d1);
+
+	f32 denom = mulf32(d11, d22) - mulf32(d21, d21);
+	f32 s, t;
+	if (denom == 0) {
+		// degenerate triangle error handler, just check the lines/points
+		s = -1;
+		t = -1;
+	}
+	else {
+		s = divf32(mulf32(d20, d21) - mulf32(d22, d01), denom);
+		t = divf32(mulf32(-s, d21) - d20, d22);
+	}
+
+	f32 dist;
+
+	if (s >= 0
+		&& t >= 0
+		&& t + s <= 4096) {
+
+		dist = mulf32(mulf32(s, s), d11);
+		dist += mulf32(mulf32(t, t), d22);
+		dist += mulf32(mulf32(s * 2, t), d21);
+		dist += mulf32(s * 2, d01);
+		dist += mulf32(t * 2, d20);
+		dist += SqrMagnitude(a);
+	}
+	else {
+		// find line that's closest to origin; just slightly pared down compared to sphere code tbh
+		dist = LineDistFromOrigin(&d1, a, b);
+
+		f32 dist2 = LineDistFromOrigin(&d2, a, c);
+		if (dist2 < dist) {
+			dist = dist2;
+		}
+
+		Vec3 d3;
+		Vec3Subtraction(c, b, &d3);
+		dist2 = LineDistFromOrigin(&d3, b, c);
+		if (dist2 < dist) {
+			dist = dist2;
+		}
+	}
+
+	return dist;
+}
+
+f32 PointDistTri(Vec3* point, Vec3* a, Vec3* b, Vec3* c) {
+	Vec3 at, bt, ct;
+	Vec3Subtraction(a, point, &at);
+	Vec3Subtraction(b, point, &bt);
+	Vec3Subtraction(c, point, &ct);
+	return OriginDistTri(&at, &bt, &ct);
+}
+
+int GJKProcessSimplex2(Simplex* simplex, Vec3* normal) {
+	Vec3* a = &simplex->points[1];
+	Vec3* b = &simplex->points[0];
+	Vec3 ab, ao;
+	Vec3Subtraction(b, a, &ab);
+	ao.x = -a->x;
+	ao.y = -a->y;
+	ao.z = -a->z;
+
+	f32 dot = DotProduct(&ab, &ao);
+
+	Vec3 tmp;
+	CrossProduct(&ab, &ao, &tmp);
+
+	if (dot > 0 && f32abs(SqrMagnitude(&tmp)) <= GJK_LENIENCY) {
+		return 1;
+	}
+
+	// get new direction
+	if (dot <= 0) {
+		// not crossing ab...
+		simplex->count = 1;
+		simplex->points[0] = *a;
+		*normal = ao;
+	}
+	else {
+		TripleCrossProduct(&ab, &ao, &ab, normal);
+	}
+	return 0;
+}
+
+int GJKProcessSimplex3(Simplex* simplex, Vec3* normal)
+{
+	Vec3* a = &simplex->points[2];
+	Vec3* b = &simplex->points[1];
+	Vec3* c = &simplex->points[0];
+
+	// if the triangle is degenerate, then we can't expand the simplex, and therefor no intersection.
+	if (VecEqual(a, b) || VecEqual(a, c)) {
+		return 2;
+	}
+
+	// check if origin is touching; i wouldn't do this normally, but this saves us an iteration under many circumstances, so it's worth it to me
+	//f32 dist = OriginDistTri(a, b, c);
+	//if (f32abs(dist) < GJK_LENIENCY) {
+	//	return 1;
+	//}
+
+	// relative to origin...
+	Vec3 ao;
+	ao.x = -a->x;
+	ao.y = -a->y;
+	ao.z = -a->z;
+
+	// get the line segments and normal
+	Vec3 ab, ac;
+	Vec3Subtraction(b, a, &ab);
+	Vec3Subtraction(c, a, &ac);
+	Vec3 abc;
+	CrossProduct(&ab, &ac, &abc);
+
+	Vec3 tmp;
+	CrossProduct(&abc, &ac, &tmp);
+	f32 dot = DotProduct(&tmp, &ao);
+	if (dot >= 0) {
+		dot = DotProduct(&ac, &ao);
+		if (dot >= 0) {
+			simplex->points[1] = *a;
+			simplex->count = 2;
+			TripleCrossProduct(&ac, &ao, &ac, normal);
+			return 0;
+		}
+		else {
+			dot = DotProduct(&ab, &ao);
+			if (dot >= 0) {
+				// a is guaranteed to be safe here, even though it's a pointer into the simplex
+				simplex->points[0] = *b;
+				simplex->points[1] = *a;
+				simplex->count = 2;
+				TripleCrossProduct(&ab, &ao, &ab, normal);
+				return 0;
+			}
+			else {
+				// work with latest added point...
+				simplex->points[0] = *a;
+				simplex->count = 1;
+				*normal = *a;
+				return 0;
+			}
+		}
+	}
+	else {
+		CrossProduct(&ab, &abc, &tmp);
+		dot = DotProduct(&tmp, &ao);
+		// copy + pasted from earlier, kinda bad tbh
+		if (dot >= 0) {
+			dot = DotProduct(&ab, &ao);
+			if (dot >= 0) {
+				// a is guaranteed to be safe here, even though it's a pointer into the simplex
+				simplex->points[0] = *b;
+				simplex->points[1] = *a;
+				simplex->count = 2;
+				TripleCrossProduct(&ab, &ao, &ab, normal);
+				return 0;
+			}
+			else {
+				// work with latest added point...
+				simplex->points[0] = *a;
+				simplex->count = 1;
+				*normal = *a;
+			}
+		}
+		else {
+			dot = DotProduct(&abc, &ao);
+			if (dot >= 0) {
+				*normal = abc;
+				return 0;
+			}
+			else {
+				tmp = *c;
+				// have to swap b and c...
+				simplex->points[0] = *b;
+				simplex->points[1] = tmp;
+				// go find a point opposite the triangle we have
+				normal->x = -abc.x;
+				normal->y = -abc.y;
+				normal->z = -abc.z;
+				return 0;
+			}
+		}
+	}
+}
+
+int GJKProcessSimplex4(Simplex* simplex, Vec3* normal) {
+
+	Vec3* a = &simplex->points[3];
+	Vec3* b = &simplex->points[2];
+	Vec3* c = &simplex->points[1];
+	Vec3* d = &simplex->points[0];
+
+	// if the simplex is degenerate, it can't be a collision
+	f32 dist = PointDistTri(a, b, c, d);
+	if (f32abs(dist) < GJK_LENIENCY) {
+		return 2;
+	}
+
+	// compute normals for each face, and lines that make them up
+
+	Vec3 ab, ac, ad;
+	Vec3Subtraction(b, a, &ab);
+	Vec3Subtraction(c, a, &ac);
+	Vec3Subtraction(d, a, &ad);
+	Vec3 abc, acd, adb;
+	CrossProduct(&ab, &ac, &abc);
+	CrossProduct(&ac, &ad, &acd);
+	CrossProduct(&ad, &ab, &adb);
+
+	Vec3 ao;
+	ao.x = -a->x;
+	ao.y = -a->y;
+	ao.z = -a->z;
+
+	// figure out the direction relative to the face
+	bool b_on_acd = DotProduct(&acd, &ab) >= 0;
+	bool c_on_adb = DotProduct(&adb, &ac) >= 0;
+	bool d_on_abc = DotProduct(&abc, &ad) >= 0;
+
+	// now use the sign and do the same thing again
+	bool ab_o = DotProduct(&acd, &ao) >= 0 == b_on_acd;
+	bool ac_o = DotProduct(&adb, &ao) >= 0 == c_on_adb;
+	bool ad_o = DotProduct(&abc, &ao) >= 0 == d_on_abc;
+
+	if (ab_o && ac_o && ad_o) {
+		// origin is in simplex! we're done!
+		return 1;
+	}
+	else if (!ab_o) {
+		// B is wrong, discard
+
+		simplex->points[2] = *a;
+	}
+	else if (!ac_o) {
+		// C is wrong, discard
+		simplex->points[1] = *d;
+		simplex->points[0] = *b;
+		simplex->points[2] = *a;
+	}
+	else {
+		// D is wrong, discard
+		simplex->points[0] = *c;
+		simplex->points[1] = *b;
+		simplex->points[2] = *a;
+	}
+
+	simplex->count = 3;
+
+	return GJKProcessSimplex3(simplex, normal);
+}
+
+int GJKProcessSimplex(Simplex* simplex, Vec3* normal) {
+	switch (simplex->count) {
+	case 2:
+		return GJKProcessSimplex2(simplex, normal);
+		break;
+	case 3:
+		return GJKProcessSimplex3(simplex, normal);
+		break;
+	default:
+		return GJKProcessSimplex4(simplex, normal);
+		break;
+	}
+	return 2; // ??
+}
+
+// normalBetweenShape1Shape2 expected in the form of shape2-shape1
+bool BasicGJK(void *shape1, void *shape2, Vec3* normalBetweenShape1Shape2, Simplex* outputSimplex,
+	Vec3(*findPointSupport1)(void* shape, Vec3 *normal), Vec3(*findPointSupport2)(void* shape, Vec3 *normal)) {
+	Vec3 p1, p2;
+	p1 = findPointSupport1(shape1, normalBetweenShape1Shape2);
+	Vec3 normal;
+	normal.x = -normalBetweenShape1Shape2->x;
+	normal.y = -normalBetweenShape1Shape2->y;
+	normal.z = -normalBetweenShape1Shape2->z;
+	p2 = findPointSupport2(shape2, &normal);
+	Vec3Subtraction(&p1, &p2, &outputSimplex->points[0]);
+	// normalize this here so we can just target origin
+	Normalize(&outputSimplex->points[0], &normal);
+	outputSimplex->count = 1;
+	normal.x = -normal.x;
+	normal.y = -normal.y;
+	normal.z = -normal.z;
+	// should be enough to cover every use case...
+	for (int i = 0; i < 16; ++i) {
+		p1 = findPointSupport2(shape1, &normal);
+		Vec3 normal2;
+		normal2.x = -normal.x;
+		normal2.y = -normal.y;
+		normal2.z = -normal.z;
+		p2 = findPointSupport1(shape2, &normal2);
+		Vec3Subtraction(&p1, &p2, &outputSimplex->points[outputSimplex->count]);
+		// early out: no point towards origin, therefor simplex can not contain origin
+		if (DotProduct(&normal, &outputSimplex->points[outputSimplex->count]) < 0) {
+			return false;
+		}
+
+		++outputSimplex->count;
+
+		int simplexStatus = GJKProcessSimplex(outputSimplex, &normal);
+
+		if (simplexStatus == 1) {
+			return true;
+		}
+		else if (simplexStatus == 2) {
+			// no intersection :(
+			return false;
+		}
+		Normalize(&normal, &normal);
+	}
+	// TODO: add loop limit? idk, unlikely anyone will use this function directly tbh
 	return false;
 }

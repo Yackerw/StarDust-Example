@@ -150,6 +150,10 @@ typedef struct {
 #define r4z 14
 #define r4w 15*/
 
+// should only be used if you're certain values are < 65536
+#define mulf32fast(a, b) (((a) * (b)) >> 12)
+#define divf32fast(a, b) (((a) << 12) / (b))
+
 void MakeTranslationMatrix(f32 x, f32 y, f32 z, m4x4 *retValue);
 
 void MakeScaleMatrix(f32 x, f32 y, f32 z, m4x4 *retValue);
@@ -171,6 +175,8 @@ void QuatTimesQuat(Quaternion *left, Quaternion *right, Quaternion *out);
 void QuatNormalize(Quaternion *input);
 
 void QuatSlerp(Quaternion *left, Quaternion *right, Quaternion *out, f32 t);
+
+f32 DotProductNormal(Vec3* left, Vec3* right);
 
 f32 DotProduct(Vec3 *left, Vec3 *right);
 
@@ -206,8 +212,6 @@ void Reflect(Vec3 *a, Vec3 *b, Vec3 *out);
 
 f32 Clamp(f32 value, f32 min, f32 max);
 
-int iClamp(int value, int min, int max);
-
 f32 Max(f32 value, f32 max);
 
 f32 Min(f32 value, f32 min);
@@ -235,5 +239,7 @@ void QuaternionToEuler(Quaternion* quat, Vec3* euler);
 f32 f32rand(f32 min, f32 max);
 
 long long Int64Div(int left, int right);
+
+bool VecEqual(Vec3* a, Vec3* b);
 
 #endif
