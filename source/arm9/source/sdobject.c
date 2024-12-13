@@ -185,11 +185,11 @@ int SphereCollisionCheck(CollisionSphere *sphere, unsigned int layerMask, Collis
 			rotatedPosition.y -= meshObject->position.y;
 			rotatedPosition.z -= meshObject->position.z;
 			// and scale
-			rotatedPosition.x = divf32(rotatedPosition.x, meshObject->scale.x);
-			rotatedPosition.y = divf32(rotatedPosition.y, meshObject->scale.y);
-			rotatedPosition.z = divf32(rotatedPosition.z, meshObject->scale.z);
+			rotatedPosition.x = divf32f(rotatedPosition.x, meshObject->scale.x);
+			rotatedPosition.y = divf32f(rotatedPosition.y, meshObject->scale.y);
+			rotatedPosition.z = divf32f(rotatedPosition.z, meshObject->scale.z);
 			// radius...
-			int newRadius = divf32(sphere->radius, meshObject->scale.x);
+			int newRadius = divf32f(sphere->radius, meshObject->scale.x);
 			// are we INSIDE the AABB?
 			if (f32abs(rotatedPosition.x - meshObject->meshCol->AABBPosition.x) > meshObject->meshCol->AABBBounds.x + newRadius ||
 			f32abs(rotatedPosition.y - meshObject->meshCol->AABBPosition.y) > meshObject->meshCol->AABBBounds.y + newRadius ||
@@ -300,7 +300,7 @@ ITCM_CODE void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, O
 	Vec3 tmpPos;
 	Quaternion inverseObjectRotation;
 	// radius...
-	f32 newRadius = divf32(sphere->radius, meshObject->scale.x);
+	f32 newRadius = divf32f(sphere->radius, meshObject->scale.x);
 	// the quaternion operations here are actually rather expensive, so let's early out extra early. just be crazy lenient.
 	// potential solution: bounding sphere instead of bounding box?
 	f32 AABBBounds = Max(meshObject->meshCol->AABBBounds.x, Max(meshObject->meshCol->AABBBounds.y, meshObject->meshCol->AABBBounds.z));
@@ -318,9 +318,9 @@ ITCM_CODE void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, O
 	QuatTimesVec3(&inverseObjectRotation, &tmpPos, &rotatedPosition);
 	// adjust the position to inverse the transformation of the mesh object
 	// and scale
-	rotatedPosition.x = divf32(rotatedPosition.x, meshObject->scale.x);
-	rotatedPosition.y = divf32(rotatedPosition.y, meshObject->scale.y);
-	rotatedPosition.z = divf32(rotatedPosition.z, meshObject->scale.z);
+	rotatedPosition.x = divf32f(rotatedPosition.x, meshObject->scale.x);
+	rotatedPosition.y = divf32f(rotatedPosition.y, meshObject->scale.y);
+	rotatedPosition.z = divf32f(rotatedPosition.z, meshObject->scale.z);
 	// are we INSIDE the AABB?
 	if (f32abs(rotatedPosition.x - meshObject->meshCol->AABBPosition.x) > meshObject->meshCol->AABBBounds.x + newRadius ||
 	f32abs(rotatedPosition.y - meshObject->meshCol->AABBPosition.y) > meshObject->meshCol->AABBBounds.y + newRadius ||

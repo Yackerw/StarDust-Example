@@ -2845,7 +2845,7 @@ ITCM_CODE void UpdateAnimator(Animator *animator, Model *referenceModel) {
 		prevLerpAmnt = 4096;
 	}
 	else {
-		prevLerpAmnt = divf32(animator->lerpPrevTime, animator->lerpPrevTimeTarget);
+		prevLerpAmnt = divf32f(animator->lerpPrevTime, animator->lerpPrevTimeTarget);
 	}
 	if (prevLerpAmnt < 0) {
 		prevLerpAmnt = 4096;
@@ -3632,10 +3632,10 @@ void SetupCameraMatrixPartial(int x, int y, int width, int height) {
 	glLoadIdentity();
 	m4x4 screenAdjustMatrix = { 0 };
 	// offset target...note: don't need to multiply by 4096 for divf32! it'll convert to base-4096 post division for us, due to...well, 0.1/0.1 = 1.0
-	f32 oneMinusWidth = (4096 - divf32(width, 256)) * 2;
-	f32 oneMinusHeight = (4096 - divf32(height, 192)) * 2;
-	screenAdjustMatrix.m[12] = Lerp(oneMinusWidth, -oneMinusWidth, divf32(x, 256 - width));
-	screenAdjustMatrix.m[13] = Lerp(oneMinusHeight, -oneMinusHeight, divf32(y, 192 - height));
+	f32 oneMinusWidth = (4096 - divf32f(width, 256)) * 2;
+	f32 oneMinusHeight = (4096 - divf32f(height, 192)) * 2;
+	screenAdjustMatrix.m[12] = Lerp(oneMinusWidth, -oneMinusWidth, divf32f(x, 256 - width));
+	screenAdjustMatrix.m[13] = Lerp(oneMinusHeight, -oneMinusHeight, divf32f(y, 192 - height));
 	screenAdjustMatrix.m[0] = 4096;
 	screenAdjustMatrix.m[5] = 4096;
 	screenAdjustMatrix.m[10] = 4096;
@@ -3646,7 +3646,7 @@ void SetupCameraMatrixPartial(int x, int y, int width, int height) {
 	MakeScaleMatrix(-4096, 4096, 4096, &tmpMat);
 	glMultMatrix4x4(&tmpMat);
 #endif
-	gluPerspectivef32(cameraFOV, divf32(width, height), cameraNear, cameraFar);
+	gluPerspectivef32(cameraFOV, divf32f(width, height), cameraNear, cameraFar);
 	Vec3 cameraPositionMod;
 	cameraPositionMod.x = cameraPosition.x % 4096;
 	cameraPositionMod.y = cameraPosition.y % 4096;
@@ -3680,7 +3680,7 @@ void SetupCameraMatrixPartial(int x, int y, int width, int height) {
 
 void SetupCameraMatrix() {
 	m4x4 perspectiveMatrix;
-	MakePerspectiveMatrix(cameraFOV, divf32(GetWindowWidth() * 4096, GetWindowHeight() * 4096), cameraNear, cameraFar, &perspectiveMatrix);
+	MakePerspectiveMatrix(cameraFOV, divf32f(GetWindowWidth() * 4096, GetWindowHeight() * 4096), cameraNear, cameraFar, &perspectiveMatrix);
 #ifdef FLIP_X
 	m4x4 tmpMat;
 	m4x4 workMat;

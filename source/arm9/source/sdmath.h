@@ -242,4 +242,20 @@ long long Int64Div(int left, int right);
 
 bool VecEqual(Vec3* a, Vec3* b);
 
+// introduced as libnds' built in divf32 is written incorrectly, causing it to actually take twice as long as it should!
+static inline int divf32f(int left, int right) {
+#ifndef _NOTDS
+	REG_DIVCNT = DIV_64_32;
+
+	REG_DIV_NUMER = ((long long)left) << 12;
+	REG_DIV_DENOM_L = right;
+
+	while (REG_DIVCNT & DIV_BUSY);
+
+	return (REG_DIV_RESULT_L);
+#else
+	return divf32(left, right);
+#endif
+}
+
 #endif

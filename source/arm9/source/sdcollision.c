@@ -142,8 +142,8 @@ ITCM_CODE Vec3 BarycentricCoords(CollisionTriangle *tri, Vec3 *point) {
 	f32 d21 = DotProduct(&v2, &v1);
 	f32 denom = mulf32(d00, d11) - mulf32(d01, d01);
 	Vec3 retValue;
-	retValue.x = divf32(mulf32(d11, d20) - mulf32(d01, d21), denom);
-	retValue.y = divf32(mulf32(d00, d21) - mulf32(d01, d20), denom);
+	retValue.x = divf32f(mulf32(d11, d20) - mulf32(d01, d21), denom);
+	retValue.y = divf32f(mulf32(d00, d21) - mulf32(d01, d20), denom);
 	retValue.z = 4096 - retValue.x - retValue.y;
 	
 	return retValue;
@@ -172,7 +172,7 @@ ITCM_CODE bool SphereOnLine(CollisionSphere *sphere, Vec3 *p1, Vec3 *p2, Vec3 *c
 	Vec3Subtraction(p1, sphere->position, &working2);
 	t = DotProduct(&working3, &working2);
 	t2 = DotProduct(&working3, &working3);
-	t = divf32(t, t2);
+	t = divf32f(t, t2);
 	
 	working.x = mulf32(t, working3.x);
 	working.y = mulf32(t, working3.y);
@@ -874,7 +874,7 @@ ITCM_CODE bool RayOnPlane(Vec3* point, Vec3* direction, Vec3* normal, f32 planeD
 	if (nd >= 0) {
 		return false;
 	}
-	f32 hitDist = divf32(planeDistance - pn, nd);
+	f32 hitDist = divf32f(planeDistance - pn, nd);
 	if (hitDist >= 0) {
 		if (t != NULL) {
 			*t = hitDist;
@@ -1010,7 +1010,7 @@ ITCM_CODE bool RayOnMesh(Vec3* point, Vec3* direction, f32 length, Vec3* rayMin,
 		f32abs(meshScale->z)
 	} } };
 	f32 lenDot = DotProduct(&absDir, &absScale);
-	f32 newLength = divf32(length, lenDot);
+	f32 newLength = divf32f(length, lenDot);
 
 	Vec3 rayPlusDir = { { {
 	newPoint.x + mulf32(newDirection.x, newLength),
@@ -1114,7 +1114,7 @@ ITCM_CODE bool RayOnMesh(Vec3* point, Vec3* direction, f32 length, Vec3* rayMin,
 				truLen = *t;
 			}
 			else {
-				truLen = divf32(closestHit, lenDot);
+				truLen = divf32f(closestHit, lenDot);
 			}
 
 			hitPos->x = point->x + mulf32(direction->x, truLen);
@@ -1227,7 +1227,7 @@ void TripleCrossProduct(Vec3* a, Vec3* b, Vec3* c, Vec3* out) {
 f32 LineDistFromOrigin(Vec3 *d, Vec3 *a, Vec3 *b) {
 	// a lot of magnitudes here...actually largely slower because of the 64 bit math rather than sqrts...
 	f32 t = -DotProduct(a, d);
-	t = divf32(t, Magnitude(d));
+	t = divf32f(t, Magnitude(d));
 
 	if (t <= 0) {
 		// off the line from a
@@ -1273,8 +1273,8 @@ f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c) {
 		t = -1;
 	}
 	else {
-		s = divf32(mulf32(d20, d21) - mulf32(d22, d01), denom);
-		t = divf32(mulf32(-s, d21) - d20, d22);
+		s = divf32f(mulf32(d20, d21) - mulf32(d22, d01), denom);
+		t = divf32f(mulf32(-s, d21) - d20, d22);
 	}
 
 	f32 dist;
@@ -1359,12 +1359,6 @@ int GJKProcessSimplex3(Simplex* simplex, Vec3* normal)
 	if (VecEqual(a, b) || VecEqual(a, c)) {
 		return 2;
 	}
-
-	// check if origin is touching; i wouldn't do this normally, but this saves us an iteration under many circumstances, so it's worth it to me
-	//f32 dist = OriginDistTri(a, b, c);
-	//if (f32abs(dist) < GJK_LENIENCY) {
-	//	return 1;
-	//}
 
 	// relative to origin...
 	Vec3 ao;

@@ -185,10 +185,10 @@ ITCM_CODE void QuatNormalize(Quaternion *input) {
 		input->w = 4096;
 		return;
 	}
-	input->x = divf32(input->x, magnitude);
-	input->y = divf32(input->y, magnitude);
-	input->z = divf32(input->z, magnitude);
-	input->w = divf32(input->w, magnitude);
+	input->x = divf32f(input->x, magnitude);
+	input->y = divf32f(input->y, magnitude);
+	input->z = divf32f(input->z, magnitude);
+	input->w = divf32f(input->w, magnitude);
 }
 
 ITCM_CODE void QuatNormalizeFast(Quaternion* input) {
@@ -397,9 +397,9 @@ ITCM_CODE void Normalize(Vec3 *vec, Vec3 *out) {
 	//out->y = divf32(vec->y, magnitude);
 	//out->z = divf32(vec->z, magnitude);
 #else
-	out->x = divf32(vec->x, magnitude);
-	out->y = divf32(vec->y, magnitude);
-	out->z = divf32(vec->z, magnitude);
+	out->x = divf32f(vec->x, magnitude);
+	out->y = divf32f(vec->y, magnitude);
+	out->z = divf32f(vec->z, magnitude);
 #endif
 }
 
@@ -422,9 +422,9 @@ ITCM_CODE void Vec3Multiplication(Vec3 *left, Vec3 *right, Vec3 *out) {
 }
 
 ITCM_CODE void Vec3Division(Vec3 *left, Vec3 *right, Vec3 *out) {
-	out->x = divf32(left->x, right->x);
-	out->y = divf32(left->y, right->y);
-	out->z = divf32(left->z, right->z);
+	out->x = divf32f(left->x, right->x);
+	out->y = divf32f(left->y, right->y);
+	out->z = divf32f(left->z, right->z);
 }
 
 ITCM_CODE f32 Lerp(f32 left, f32 right, f32 t) {
@@ -437,7 +437,7 @@ f32 Atan2(f32 y, f32 x) {
 	// arc tangent in first quadrant
 	f32 bx_a = abs(mulf32(b, mulf32(x, y)));
 	f32 num = bx_a + mulf32(y, y);
-	f32 atan_1q = divf32(num, mulf32(x, x) + bx_a + num);
+	f32 atan_1q = divf32f(num, mulf32(x, x) + bx_a + num);
 	// multiply by half pi
 	atan_1q = mulf32(atan_1q,6434);
 	// now set up the quadrant
@@ -537,9 +537,9 @@ void NormalFromVerts(Vec3s *vert1, Vec3s *vert2, Vec3s *vert3, Vec3s *out) {
 	out->y = mulf32(U.z, V.x) - mulf32(U.x, V.z);
 	out->z = mulf32(U.x, V.y) - mulf32(U.y, V.x);
 	f32 magnitude = sqrtf32(out->x * out->x + out->y * out->y + out->z * out->z);
-	out->x = divf32(out->x, magnitude);
-	out->y = divf32(out->y, magnitude);
-	out->z = divf32(out->z, magnitude);
+	out->x = divf32f(out->x, magnitude);
+	out->y = divf32f(out->y, magnitude);
+	out->z = divf32f(out->z, magnitude);
 }
 
 // above function is unreliable at low precision
@@ -562,18 +562,18 @@ ITCM_CODE void NormalFromVertsFloat(Vec3s* vert1, Vec3s* vert2, Vec3s* vert3, Ve
 }
 
 void FrustumToMatrix(f32 xmin, f32 xmax, f32 ymin, f32 ymax, f32 near, f32 far, m4x4 *ret) {
-	ret->m[r1x] = divf32(2 * near, xmax - xmin);
+	ret->m[r1x] = divf32f(2 * near, xmax - xmin);
 	ret->m[r1y] = 0;
-	ret->m[r1z] = divf32(xmax + xmin, xmax - xmin);
+	ret->m[r1z] = divf32f(xmax + xmin, xmax - xmin);
 	ret->m[r1w] = 0;
 	ret->m[r2x] = 0;
-	ret->m[r2y] = divf32(2 * near, ymax - ymin);
-	ret->m[r2z] = divf32(ymax + ymin, ymax - ymin);
+	ret->m[r2y] = divf32f(2 * near, ymax - ymin);
+	ret->m[r2z] = divf32f(ymax + ymin, ymax - ymin);
 	ret->m[r2w] = 0;
 	ret->m[r3x] = 0;
 	ret->m[r3y] = 0;
-	ret->m[r3z] = -divf32(far + near, far - near);
-	ret->m[r3w] = -divf32(2 * mulf32(far, near), far - near);
+	ret->m[r3z] = -divf32f(far + near, far - near);
+	ret->m[r3w] = -divf32f(2 * mulf32(far, near), far - near);
 	ret->m[r4x] = 0;
 	ret->m[r4y] = 0;
 	ret->m[r4z] = -4096;
@@ -832,8 +832,6 @@ f32 f32rand(f32 min, f32 max) {
 long long Int64Div(int left, int right) {
 #ifndef _NOTDS
 	REG_DIVCNT = DIV_64_32;
-
-	while (REG_DIVCNT & DIV_BUSY);
 
 	REG_DIV_NUMER = ((long long)left) << 12;
 	REG_DIV_DENOM_L = right;
