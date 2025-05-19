@@ -138,6 +138,7 @@ int main() {
 	defaultExceptionHandler();
 	if (!nitroFSInit(NULL)) {
 		printf("NitroFSInit failure");
+		while (true);
 	}
 
 #endif
@@ -155,7 +156,9 @@ int main() {
 
 	InitializeSubBG();
 
+#ifndef _NOTDS
 	consoleDemoInit();
+#endif
 	
 	// be sure to set up lighting
 	SetLightColor(0, 16, 16, 16);
@@ -205,7 +208,7 @@ int main() {
 	cube->boxCol->extents.x = 4096;
 	cube->boxCol->extents.y = 4096;
 	cube->boxCol->extents.z = 4096;
-	EulerToQuat(0, 6000, 0, &cube->rotation);
+	//EulerToQuat(0, 6000, 0, &cube->rotation);
 	CollisionBox* tmpBox = cube->boxCol;
 	tmpBox->cachedMagnitude = ((cube->rotation.w * cube->rotation.w) >> 12) - DotProductNormal((Vec3*)&cube->rotation, (Vec3*)&cube->rotation);
 	//cubeSpawn.x = 4096 * 6;
@@ -243,6 +246,15 @@ int main() {
 
 		cube->rotation = player->rotation;
 
+		/*cube->position.x = 3370;
+		cube->position.y = 2042;
+		cube->position.z = 6620;
+
+		cube->rotation.x = 0;
+		cube->rotation.y = 1566;
+		cube->rotation.z = 0;
+		cube->rotation.w = 3784;*/
+
 		Quaternion* quat = &cube->rotation;
 
 		cube->boxCol->cachedMagnitude = ((quat->w * quat->w) >> 12) - DotProductNormal((Vec3*)quat, (Vec3*)quat);
@@ -253,7 +265,18 @@ int main() {
 
 		Simplex tmpSimplex = { 0 };
 
-		printf("%i\n", BasicGJK(cube->boxCol, tmpBox, &tmpVec, &tmpSimplex, BoxSupportTest, BoxSupportTest));
+		Vec3 norm;
+		f32 pen;
+
+		//printf("%i\n", BasicGJK(cube->boxCol, tmpBox, &tmpVec, &tmpSimplex, BoxSupportTest, BoxSupportTest));
+		bool hit = GJKWithInfo(cube->boxCol, tmpBox, &cube->position, tmpBox->position, BoxSupportTest, BoxSupportTest, &norm, &pen);
+		printf("%i\n", hit);
+
+		if (hit) {
+			player->position.x += mulf32(norm.x, pen);
+			player->position.y += mulf32(norm.y, pen);
+			player->position.z += mulf32(norm.z, pen);
+		}
 
 		//printf("%i\n%i\n", GetTouchScreenX(TOUCH_ORIGIN_LEFT), GetTouchScreenY(TOUCH_ORIGIN_TOP));
 #ifdef _WIN32

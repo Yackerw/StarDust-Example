@@ -20,5 +20,5 @@ int asinLerp(int input) {
 	return FloatToAngle(asinf(f32tofloat(input)));
 }
 int sqrtf32(int input) {
-	return floattof32(sqrtf(f32tofloat(input)));
+	return floattof32(sqrtf(f32tofloat(abs(input))));
 }

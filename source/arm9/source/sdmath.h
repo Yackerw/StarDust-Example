@@ -222,6 +222,8 @@ f32 Pow(f32 value, f32 toPow);
 
 void NormalFromVerts(Vec3s *vert1, Vec3s *vert2, Vec3s *vert3, Vec3s *out);
 
+void NormalFromVertsInt(Vec3* vert1, Vec3* vert2, Vec3* vert3, Vec3* out);
+
 void NormalFromVertsFloat(Vec3s* vert1, Vec3s* vert2, Vec3s* vert3, Vec3s* out);
 
 void MakePerspectiveMatrix(f32 fov, f32 aspect, f32 near, f32 far, m4x4* ret);
@@ -243,7 +245,7 @@ long long Int64Div(int left, int right);
 bool VecEqual(Vec3* a, Vec3* b);
 
 // introduced as libnds' built in divf32 is written incorrectly, causing it to actually take twice as long as it should!
-static inline int divf32f(int left, int right) {
+static inline f32 divf32f(int left, int right) {
 #ifndef _NOTDS
 	REG_DIVCNT = DIV_64_32;
 
@@ -257,5 +259,24 @@ static inline int divf32f(int left, int right) {
 	return divf32(left, right);
 #endif
 }
+
+// see divf32f
+static inline f32 sqrtf32f(f32 input)
+{
+#ifndef _NOTDS
+	REG_SQRTCNT = SQRT_64;
+
+	REG_SQRT_PARAM = ((long long)input) << 12;
+
+	while (REG_SQRTCNT & SQRT_BUSY);
+
+	return REG_SQRT_RESULT;
+#else
+	return sqrtf32(input);
+#endif
+}
+
+#define divf32 divf32f
+#define sqrtf32 sqrtf32f
 
 #endif

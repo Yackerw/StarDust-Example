@@ -82,4 +82,8 @@ bool SphereOnOBB(CollisionSphere* sphere, CollisionBox* box, Vec3* hitPos, Vec3*
 bool BasicGJK(void* shape1, void* shape2, Vec3* normalBetweenShape1Shape2, Simplex* outputSimplex,
 	Vec3(*findPointSupport1)(void* shape, Vec3* normal), Vec3(*findPointSupport2)(void* shape, Vec3* normal));
 
+bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Origin,
+	Vec3(*findPointSupport1)(void* shape, Vec3* normal), Vec3(*findPointSupport2)(void* shape, Vec3* normal),
+	Vec3* outNormal, f32* outPenetration);
+
 #endif

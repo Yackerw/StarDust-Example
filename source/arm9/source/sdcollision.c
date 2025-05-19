@@ -14,6 +14,14 @@
 #define FLOATBARY
 //#define BARY64
 
+#define FACE_INTERIOR -1
+#define FACE_EDGE0 0
+#define FACE_EDGE1 1
+#define FACE_EDGE2 2
+#define FACE_VERT0 3
+#define FACE_VERT1 4
+#define FACE_VERT2 5
+
 #ifdef COLLISION_DTCM
 DTCM_DATA unsigned short staticCollisionAllocation[COLLISION_DTCM_SIZE];
 #endif
@@ -151,12 +159,81 @@ ITCM_CODE Vec3 BarycentricCoords(CollisionTriangle *tri, Vec3 *point) {
 	#endif
 }
 
+Vec3 BarycentricCoordsVectors(Vec3* a, Vec3* b, Vec3* c, Vec3* point) {
+	Vec3 v0, v1, v2;
+	Vec3Subtraction(b, a, &v0);
+	Vec3Subtraction(c, a, &v1);
+	Vec3Subtraction(point, a, &v2);
+	// FLOATBARY is...probably a big bottleneck. maybe.
+#ifdef FLOATBARY
+	float v0x = f32tofloat(v0.x);
+	float v0y = f32tofloat(v0.y);
+	float v0z = f32tofloat(v0.z);
+	float v1x = f32tofloat(v1.x);
+	float v1y = f32tofloat(v1.y);
+	float v1z = f32tofloat(v1.z);
+	float v2x = f32tofloat(v2.x);
+	float v2y = f32tofloat(v2.y);
+	float v2z = f32tofloat(v2.z);
+	float d00 = dotf(v0x, v0y, v0z, v0x, v0y, v0z);
+	float d01 = dotf(v0x, v0y, v0z, v1x, v1y, v1z);
+	float d11 = dotf(v1x, v1y, v1z, v1x, v1y, v1z);
+	float d20 = dotf(v2x, v2y, v2z, v0x, v0y, v0z);
+	float d21 = dotf(v2x, v2y, v2z, v1x, v1y, v1z);
+	float denom = d00 * d11 - d01 * d01;
+	Vec3 retValue;
+	retValue.x = floattof32((d11 * d20 - d01 * d21) / denom);
+	retValue.y = floattof32((d00 * d21 - d01 * d20) / denom);
+	retValue.z = (4096 - retValue.x) - retValue.y;
+	return retValue;
+#else
+#if defined(BARY64)
+	long long d00 = dot64(&v0, &v0);
+	long long d01 = dot64(&v0, &v1);
+	long long d11 = dot64(&v1, &v1);
+	long long d20 = dot64(&v2, &v0);
+	long long d21 = dot64(&v2, &v1);
+	long long denom = mulf64(d00, d11) - mulf64(d01, d01);
+	Vec3 retValue;
+	retValue.x = divf64(mulf64(d11, d20) - mulf64(d01, d21), denom);
+	retValue.y = divf64(mulf64(d00, d21) - mulf64(d01, d20), denom);
+	retValue.z = 4096 - retValue.x - retValue.y;
+	return retValue;
+#elif defined (BARY64_DEBUG)
+	long long d00 = dot64(&v0, &v0);
+	long long d01 = dot64(&v0, &v1);
+	long long d11 = dot64(&v1, &v1);
+	long long d20 = dot64(&v2, &v0);
+	long long d21 = dot64(&v2, &v1);
+	long long denom = mulf64(d00, d11) - mulf64(d01, d01);
+	Vec3 retValue;
+	retValue.x = divf64(mulf64(d11, d20) - mulf64(d01, d21), denom) / 4096.0f;
+	retValue.y = divf64(mulf64(d00, d21) - mulf64(d01, d20), denom) / 4096.0f;;
+	retValue.z = 4096 - retValue.x - retValue.y;
+	return retValue;
+#else
+	f32 d00 = DotProduct(&v0, &v0);
+	f32 d01 = DotProduct(&v0, &v1);
+	f32 d11 = DotProduct(&v1, &v1);
+	f32 d20 = DotProduct(&v2, &v0);
+	f32 d21 = DotProduct(&v2, &v1);
+	f32 denom = mulf32(d00, d11) - mulf32(d01, d01);
+	Vec3 retValue;
+	retValue.x = divf32f(mulf32(d11, d20) - mulf32(d01, d21), denom);
+	retValue.y = divf32f(mulf32(d00, d21) - mulf32(d01, d20), denom);
+	retValue.z = 4096 - retValue.x - retValue.y;
+
+	return retValue;
+#endif
+#endif
+}
+
 ITCM_CODE bool SphereOnPoint(CollisionSphere *sphere, f32 sphereSquareMagnitude, Vec3 *point, f32 *penetration) {
 	Vec3 distance;
 	Vec3Subtraction(sphere->position, point, &distance);
 	f32 mag = SqrMagnitude(&distance);
 	if (mag < sphereSquareMagnitude) {
-		*penetration = sphere->radius - sqrtf32(mag);
+		*penetration = sphere->radius - sqrtf32f(mag);
 		return true;
 	}
 	return false;
@@ -850,7 +927,7 @@ ITCM_CODE bool RayOnSphere(Vec3* point, Vec3* direction, CollisionSphere* sphere
 	// negative discriminant means a miss
 	if (discr < 0) return false;
 	// ray found to intersect sphere, compute intersection
-	f32 hitDist = -b - sqrtf32(discr);
+	f32 hitDist = -b - sqrtf32f(discr);
 	// if t is negative, started in sphere
 	if (hitDist < 0) {
 		hitDist = 0;
@@ -1208,7 +1285,7 @@ ITCM_CODE bool SphereOnOBB(CollisionSphere* sphere, CollisionBox* box, Vec3* hit
 		else {
 			// we're outside of cube, return values
 			Normalize(&closestRelativeToSphere, normal);
-			*t = sphere->radius - sqrtf32(sqrDist);
+			*t = sphere->radius - sqrtf32f(sqrDist);
 		}
 		Vec3 tmpNormal;
 		QuatTimesVec3(box->rotation, normal, &tmpNormal);
@@ -1224,20 +1301,34 @@ void TripleCrossProduct(Vec3* a, Vec3* b, Vec3* c, Vec3* out) {
 	CrossProduct(&work, c, out);
 }
 
-f32 LineDistFromOrigin(Vec3 *d, Vec3 *a, Vec3 *b) {
+f32 LineDistFromOrigin(Vec3 *d, Vec3 *a, Vec3 *b, int *vertOut) {
 	// a lot of magnitudes here...actually largely slower because of the 64 bit math rather than sqrts...
 	f32 t = -DotProduct(a, d);
-	t = divf32f(t, Magnitude(d));
+	// ugh
+	if (t == 0) {
+		*vertOut = FACE_VERT0;
+		return SqrMagnitude(a);
+	}
+	t = divf32f(t, SqrMagnitude(d));
 
 	if (t <= 0) {
 		// off the line from a
+		if (vertOut != NULL) {
+			*vertOut = FACE_VERT0;
+		}
 		return Magnitude(a);
 	}
 	else if (t >= 4096) {
 		// off the line from b
+		if (vertOut != NULL) {
+			*vertOut = FACE_VERT1;
+		}
 		return Magnitude(b);
 	}
 	else {
+		if (vertOut != NULL) {
+			*vertOut = FACE_INTERIOR;
+		}
 		Vec3 work;
 		work.x = mulf32(d->x, t);
 		work.y = mulf32(d->y, t);
@@ -1247,16 +1338,16 @@ f32 LineDistFromOrigin(Vec3 *d, Vec3 *a, Vec3 *b) {
 	}
 }
 
-f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c) {
+f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c, int *edgeOut) {
 
-	Vec3 d0, d1, d2;
+	/*Vec3 d0, d1, d2;
 
 	Vec3Subtraction(b, a, &d1);
 	Vec3Subtraction(c, a, &d2);
 
-	d0.x = -a->x;
-	d0.y = -a->y;
-	d0.z = -a->z;
+	d0.x = a->x;
+	d0.y = a->y;
+	d0.z = a->z;
 
 	// specialized barycentric coordinates...
 	f32 d11 = SqrMagnitude(&d1);
@@ -1265,7 +1356,8 @@ f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c) {
 	f32 d20 = DotProduct(&d2, &d0);
 	f32 d21 = DotProduct(&d2, &d1);
 
-	f32 denom = mulf32(d11, d22) - mulf32(d21, d21);
+	//f32 denom = mulf32(d11, d22) - mulf32(d21, d21);
+	float denom = d11 * d22 - d21 * d21;
 	f32 s, t;
 	if (denom == 0) {
 		// degenerate triangle error handler, just check the lines/points
@@ -1289,21 +1381,52 @@ f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c) {
 		dist += mulf32(s * 2, d01);
 		dist += mulf32(t * 2, d20);
 		dist += SqrMagnitude(a);
+		if (edgeOut != NULL) {
+			*edgeOut = FACE_INTERIOR;
+		}
+	}*/
+	// fuck
+	Vec3 faceNormal;
+	NormalFromVertsInt(a, b, c, &faceNormal);
+	f32 dist = DotProduct(&faceNormal, a);
+	Vec3 placeOnTri = { mulf32(dist, faceNormal.x), mulf32(dist, faceNormal.y), mulf32(dist, faceNormal.z) };
+	Vec3 bary = BarycentricCoordsVectors(a, b, c, &placeOnTri);
+	if (bary.x >= 0 && bary.x <= 4096 && 
+		bary.y >= 0 && bary.y <= 4096 &&
+		bary.z >= 0 && bary.z <= 4096) {
+		if (edgeOut != NULL) {
+			*edgeOut = FACE_INTERIOR;
+		}
 	}
 	else {
 		// find line that's closest to origin; just slightly pared down compared to sphere code tbh
-		dist = LineDistFromOrigin(&d1, a, b);
+		int edgePartHit;
+		Vec3 d1;
+		Vec3Subtraction(b, a, &d1);
+		dist = LineDistFromOrigin(&d1, a, b, &edgePartHit);
+		if (edgeOut != NULL) {
+			*edgeOut = edgePartHit == FACE_INTERIOR ? FACE_EDGE0 : (edgePartHit == FACE_VERT0 ? FACE_VERT0 : FACE_VERT1);
+		}
 
-		f32 dist2 = LineDistFromOrigin(&d2, a, c);
+		Vec3 d2;
+		Vec3Subtraction(c, a, &d2);
+
+		f32 dist2 = LineDistFromOrigin(&d2, a, c, &edgePartHit);
 		if (dist2 < dist) {
 			dist = dist2;
+			if (edgeOut != NULL) {
+				*edgeOut = edgePartHit == FACE_INTERIOR ? FACE_EDGE2 : (edgePartHit == FACE_VERT0 ? FACE_VERT0 : FACE_VERT2);
+			}
 		}
 
 		Vec3 d3;
 		Vec3Subtraction(c, b, &d3);
-		dist2 = LineDistFromOrigin(&d3, b, c);
+		dist2 = LineDistFromOrigin(&d3, b, c, &edgePartHit);
 		if (dist2 < dist) {
 			dist = dist2;
+			if (edgeOut != NULL) {
+				*edgeOut = edgePartHit == FACE_INTERIOR ? FACE_EDGE1 : (edgePartHit == FACE_VERT1 ? FACE_VERT1 : FACE_VERT2);
+			}
 		}
 	}
 
@@ -1315,7 +1438,7 @@ f32 PointDistTri(Vec3* point, Vec3* a, Vec3* b, Vec3* c) {
 	Vec3Subtraction(a, point, &at);
 	Vec3Subtraction(b, point, &bt);
 	Vec3Subtraction(c, point, &ct);
-	return OriginDistTri(&at, &bt, &ct);
+	return OriginDistTri(&at, &bt, &ct, NULL);
 }
 
 int GJKProcessSimplex2(Simplex* simplex, Vec3* normal) {
@@ -1329,12 +1452,12 @@ int GJKProcessSimplex2(Simplex* simplex, Vec3* normal) {
 
 	f32 dot = DotProduct(&ab, &ao);
 
-	Vec3 tmp;
+	/*Vec3 tmp;
 	CrossProduct(&ab, &ao, &tmp);
 
 	if (dot > 0 && f32abs(SqrMagnitude(&tmp)) <= GJK_LENIENCY) {
 		return 1;
-	}
+	}*/
 
 	// get new direction
 	if (dot <= 0) {
@@ -1571,5 +1694,311 @@ bool BasicGJK(void *shape1, void *shape2, Vec3* normalBetweenShape1Shape2, Simpl
 		Normalize(&normal, &normal);
 	}
 	// TODO: add loop limit? idk, unlikely anyone will use this function directly tbh
+	return false;
+}
+
+Vec3 OriginOnLine(Vec3* p1, Vec3* p2) {
+	Vec3 working;
+	Vec3 working2;
+	Vec3 working3;
+	f32 t;
+	f32 t2;
+	Vec3Subtraction(p2, p1, &working3);
+	working2 = *p1;
+	t = DotProduct(&working3, &working2);
+	t2 = DotProduct(&working3, &working3);
+	t = divf32f(t, t2);
+
+	working.x = mulf32(t, working3.x);
+	working.y = mulf32(t, working3.y);
+	working.z = mulf32(t, working3.z);
+	Vec3 closestPoint;
+	closestPoint.x = p1->x - working.x;
+	closestPoint.y = p1->y - working.y;
+	closestPoint.z = p1->z - working.z;
+
+	// if distance to closest point is greater than the spheres radius, no collision
+	working.x = -closestPoint.x;
+	working.y = -closestPoint.y;
+	working.z = -closestPoint.z;
+	// okay, get magnitude between the points. if
+	// the distance between the two points of the line and the closest point is equal to the distance between
+	// the two points of the line, then it's on the line and we return true
+	f32 magLine = SqrMagnitude(&working3);
+	Vec3Subtraction(p1, &closestPoint, &working);
+	f32 magPoint1 = Magnitude(&working);
+	Vec3Subtraction(p2, &closestPoint, &working);
+	f32 magPoint2 = Magnitude(&working);
+	magPoint1 += magPoint2;
+	// this saves us 1 (one) sqrt call for magLine. worth, I think.
+	magPoint1 = mulf32(magPoint1, magPoint1);
+	// add a little leniency for, uh...lack of precision
+	if (magPoint1 >= magLine + GJK_LENIENCY) {
+		return *p1;
+	}
+	if (magPoint1 <= magLine - GJK_LENIENCY) {
+		return *p2;
+	}
+
+	return closestPoint;
+}
+
+const int EPAEdgeTarget[] = {
+	-1, // two different verts on the same id?? invalid, can never happen
+	FACE_EDGE0, // 0-1
+	FACE_EDGE2, // 0-2
+	FACE_EDGE0, // 1-0
+	-1, // 1-1
+	FACE_EDGE1, // 1-2
+	FACE_EDGE2, // 2-0
+	FACE_EDGE1, // 2-1
+	-1 // 2-2
+};
+
+/*void WriteDebugPolytope(unsigned char* inds, Vec3* verts, int indsCount, int vertsCount) {
+	char tmpName[1024];
+	sprintf(tmpName, "TestModel%i.dbp", indsCount);
+	FILE* f = fopen(tmpName, "wb");
+	fwrite(&indsCount, 4, 1, f);
+	fwrite(&vertsCount, 4, 1, f);
+	fwrite(inds, 1, indsCount, f);
+	fwrite(verts, 12, vertsCount, f);
+	fclose(f);
+}
+
+void LoadDebugPolytope(unsigned char* inds, Vec3* verts, int* indsCount, int* vertsCount, char* fileName) {
+	FILE* f = fopen(fileName, "rb");
+	fread(indsCount, 4, 1, f);
+	fread(vertsCount, 4, 1, f);
+	fread(inds, 1, *indsCount, f);
+	fread(verts, 12, *vertsCount, f);
+	fclose(f);
+}*/
+
+bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Origin,
+	Vec3(*findPointSupport1)(void* shape, Vec3* normal), Vec3(*findPointSupport2)(void* shape, Vec3* normal),
+	Vec3* outNormal, f32* outPenetration) {
+	Simplex simplex = { 0 };
+
+	Vec3 normalBetweenShape1Shape2;
+	Vec3Subtraction(shape2Origin, shape1Origin, &normalBetweenShape1Shape2);
+
+	Normalize(&normalBetweenShape1Shape2, &normalBetweenShape1Shape2);
+
+	bool hit = BasicGJK(shape1, shape2, &normalBetweenShape1Shape2, &simplex, findPointSupport1, findPointSupport2);
+	if (!hit) {
+		return false;
+	}
+
+	// future upgrade(?) note: anticipates a full simplex. if a simplex is only 2 or 3 points, you can just get the normal from origin
+	// create the extending polytope initially. hard coded to a set size because of expectation of cubes
+	Vec3 polyVerts[24];
+	unsigned char polyTris[3 * 24 * 2];
+	f32 faceDists[24 * 2];
+	char faceEdges[24 * 2]; // 672 bytes of stack...pretty harsh.
+
+	polyVerts[0] = simplex.points[0];
+	polyVerts[1] = simplex.points[1];
+	polyVerts[2] = simplex.points[2];
+	polyVerts[3] = simplex.points[3];
+
+	polyTris[0] = 0;
+	polyTris[1] = 1;
+	polyTris[2] = 2;
+
+	polyTris[3] = 3;
+	polyTris[4] = 2;
+	polyTris[5] = 1;
+
+	polyTris[6] = 3;
+	polyTris[7] = 0;
+	polyTris[8] = 2;
+
+	polyTris[9] = 3;
+	polyTris[10] = 0;
+	polyTris[11] = 1;
+
+	// the ordering of triangles shouldn't really matter so long as the abs value is used...
+	int triInd = 12;
+	int vertInd = 4;
+	//LoadDebugPolytope(polyTris, polyVerts, &triInd, &vertInd, "TestModelGood.dbp");
+	while (true) {
+		//WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd);
+		if (triInd >= 3 * 24 * 2) {
+#ifndef _NOTDS
+			char buff[256];
+			sprintf(buff, "Bad polytope? Please report with save state! Vars: %X %X %X %X", polyTris, polyVerts, shape1, shape2);
+			sassert(0, buff);
+#else
+			printf("Bad polytope? Locking up, please report!");
+			while (true) {
+
+			}
+#endif
+	}
+		f32 shortestDist = 0x7FFFFFFF;
+		f32 shortestEdge;
+		int shortestTri;
+		for (int i = 0; i < triInd; i += 3) {
+			int edge;
+			f32 triDist = OriginDistTri(&polyVerts[polyTris[i]], &polyVerts[polyTris[i + 1]], &polyVerts[polyTris[i + 2]], &edge);
+			f32 absTriDist = f32abs(triDist);
+			if (absTriDist < shortestDist) {
+				shortestDist = absTriDist;
+				shortestTri = i;
+				shortestEdge = edge;
+			}
+		}
+
+		// expand polytope! tessellate the face or edge
+		if (shortestEdge == FACE_INTERIOR) {
+			Vec3 tmpNorm;
+			NormalFromVertsInt(&polyVerts[polyTris[shortestTri]], &polyVerts[polyTris[shortestTri + 1]], &polyVerts[polyTris[shortestTri + 2]], &tmpNorm);
+			// more precise distance value
+			shortestDist = DotProduct(&polyVerts[polyTris[shortestTri]], &tmpNorm);
+			// ensure the normal faces away from origin
+			if (shortestDist < 0) {
+				tmpNorm.x = -tmpNorm.x;
+				tmpNorm.y = -tmpNorm.y;
+				tmpNorm.z = -tmpNorm.z;
+				shortestDist = -shortestDist;
+			}
+			Vec3 p1 = findPointSupport1(shape1, &tmpNorm);
+			Vec3 tmpNorm2;
+			tmpNorm2.x = -tmpNorm.x;
+			tmpNorm2.y = -tmpNorm.y;
+			tmpNorm2.z = -tmpNorm.z;
+			Vec3 p2 = findPointSupport2(shape2, &tmpNorm2);
+			Vec3Subtraction(&p1, &p2, &p1);
+
+			// new vert isn't further away, we're done
+			f32 newPointDist = DotProduct(&p1, &tmpNorm);
+			if (newPointDist <= (shortestDist + GJK_LENIENCY) || shortestDist <= GJK_LENIENCY) {
+				*outPenetration = shortestDist;
+				*outNormal = tmpNorm2;
+				return true;
+			}
+			else {
+				// append vert, tessellate face, continue
+				polyVerts[vertInd] = p1;
+
+				polyTris[triInd] = vertInd;
+				polyTris[triInd + 1] = polyTris[shortestTri];
+				polyTris[triInd + 2] = polyTris[shortestTri + 1];
+
+				polyTris[triInd + 3] = vertInd;
+				polyTris[triInd + 4] = polyTris[shortestTri];
+				polyTris[triInd + 5] = polyTris[shortestTri + 2];
+
+				polyTris[shortestTri] = vertInd;
+
+				++vertInd;
+				triInd += 6;
+			}
+		}
+		else if (shortestEdge < FACE_VERT0) {
+			// figure out the edge verts
+			unsigned short edge0 = polyTris[shortestTri + shortestEdge];
+			unsigned short edge1 = polyTris[shortestEdge == 2 ? shortestTri : (shortestTri + shortestEdge + 1)];
+			unsigned short thirdVert = polyTris[(shortestEdge == 0 ? shortestTri + 2 : (shortestEdge == 1 ? shortestTri : shortestTri + 1))];
+			// now we have to tessellate the edge...
+
+			Vec3 closestPoint = OriginOnLine(&polyVerts[edge0], &polyVerts[edge1]);
+
+			// ugh, okay, closestPoint will be the normal
+			Normalize(&closestPoint, outNormal);
+
+			Vec3 p1 = findPointSupport1(shape1, outNormal);
+			Vec3 tmpNorm;
+			tmpNorm.x = -outNormal->x;
+			tmpNorm.y = -outNormal->y;
+			tmpNorm.z = -outNormal->z;
+			Vec3 p2 = findPointSupport2(shape2, &tmpNorm);
+
+			Vec3Subtraction(&p1, &p2, &p1);
+
+			// new vert isn't further away, we're done
+			f32 dist = DotProduct(&p1, outNormal);
+			if (dist <= (DotProduct(&closestPoint, outNormal) + GJK_LENIENCY) || VecEqual(&p1, &polyVerts[thirdVert])) {
+				*outPenetration = shortestDist;
+				*outNormal = tmpNorm;
+				return true;
+			}
+			else {
+				// so this part sucks, we have to tessellate an EDGE. so, adjust every face using it
+				polyVerts[vertInd] = p1;
+
+				int currTriInd = triInd;
+				for (int i = 0; i < currTriInd; i += 3) {
+					int newEdge0 = -1;
+					int newEdge1 = -1;
+					if (polyTris[i] == edge0) {
+						newEdge0 = 0;
+					}
+					if (polyTris[i + 1] == edge0) {
+						newEdge0 = 1;
+					}
+					if (polyTris[i + 2] == edge0) {
+						newEdge0 = 2;
+					}
+					if (polyTris[i] == edge1) {
+						newEdge1 = 0;
+					}
+					if (polyTris[i + 1] == edge1) {
+						newEdge1 = 1;
+					}
+					if (polyTris[i + 2] == edge1) {
+						newEdge1 = 2;
+					}
+
+					// edge detected! create new polygon, and adjust old one!
+					if (newEdge0 != -1 && newEdge1 != -1) {
+						// figure out the edge to be tessellated...
+						int targetEdge = EPAEdgeTarget[newEdge0 + (newEdge1 * 3)];
+						// this ones always done, so just do it here
+						polyTris[triInd] = vertInd;
+						switch (targetEdge) {
+						case FACE_EDGE0:
+							// tessellate 0-1, so both take 2, each take one of 0 or 1
+							polyTris[triInd + 1] = polyTris[i];
+							polyTris[triInd + 2] = polyTris[i + 2];
+
+							// +1 and +2 are already +1 and +2, so change 0
+							polyTris[i] = vertInd;
+							break;
+						case FACE_EDGE2:
+							// tessellate 0-2, so both take 1, each take one of 0 or 2
+							polyTris[triInd + 1] = polyTris[i + 1];
+							polyTris[triInd + 2] = polyTris[i + 2];
+
+							polyTris[i + 2] = vertInd;
+							break;
+						case FACE_EDGE1:
+							// tessellate 1-2, so both take 0, each take one of 1 or 2
+							polyTris[triInd + 1] = polyTris[i];
+							polyTris[triInd + 2] = polyTris[i + 2];
+
+							polyTris[i + 2] = vertInd;
+							break;
+						}
+						triInd += 3;
+					}
+				}
+				++vertInd;
+			}
+		}
+		else {
+			// direct vert interaction, use vert as normal
+			Vec3* vert = &polyVerts[polyTris[shortestTri + shortestEdge - FACE_VERT0]];
+			Normalize(vert, outNormal);
+			outNormal->x = -outNormal->x;
+			outNormal->y = -outNormal->y;
+			outNormal->z = -outNormal->z;
+			*outPenetration = Magnitude(vert);
+			return true;
+		}
+
+	}
+	// ?
 	return false;
 }

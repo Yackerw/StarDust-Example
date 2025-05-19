@@ -353,6 +353,8 @@ ITCM_CODE void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, O
 		if (SphereOnTrianglePlane(&newSphere, &meshObject->meshCol->triangles[trisToCollideWith[i]], &localNormal, &localPen, &onPlane)) {
 			hitInfo.hitTri = trisToCollideWith[i];
 			hitInfo.penetration = mulf32(meshObject->scale.x, localPen);
+			// improve accuracy...
+			Normalize(&localNormal, &localNormal);
 			QuatTimesVec3(&meshObject->rotation, &localNormal, &hitInfo.normal);
 			hitInfo.hitPos.x = mulf32(-hitInfo.normal.x, sphere->radius - hitInfo.penetration) + sphere->position->x;
 			hitInfo.hitPos.y = mulf32(-hitInfo.normal.y, sphere->radius - hitInfo.penetration) + sphere->position->y;
@@ -370,6 +372,8 @@ ITCM_CODE void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, O
 		if (trisToCollideWith[i] != 0xFFFF && SphereOnTriangleLine(&newSphere, &meshObject->meshCol->triangles[trisToCollideWith[i]], &localNormal, &localPen)) {
 			hitInfo.hitTri = trisToCollideWith[i];
 			hitInfo.penetration = mulf32(meshObject->scale.x, localPen);
+			// improve accuracy...
+			Normalize(&localNormal, &localNormal);
 			QuatTimesVec3(&meshObject->rotation, &localNormal, &hitInfo.normal);
 			hitInfo.hitPos.x = mulf32(-hitInfo.normal.x, sphere->radius - hitInfo.penetration) + sphere->position->x;
 			hitInfo.hitPos.y = mulf32(-hitInfo.normal.y, sphere->radius - hitInfo.penetration) + sphere->position->y;
@@ -385,6 +389,8 @@ ITCM_CODE void SphereObjOnMeshObj(CollisionSphere *sphere, Object *meshObject, O
 		if (trisToCollideWith[i] != 0xFFFF && SphereOnTriangleVertex(&newSphere, sphereRadiusSqr, &meshObject->meshCol->triangles[trisToCollideWith[i]], &localNormal, &localPen)) {
 			hitInfo.hitTri = trisToCollideWith[i];
 			hitInfo.penetration = mulf32(meshObject->scale.x, localPen);
+			// improve accuracy...
+			Normalize(&localNormal, &localNormal);
 			QuatTimesVec3(&meshObject->rotation, &localNormal, &hitInfo.normal);
 			hitInfo.hitPos.x = mulf32(-hitInfo.normal.x, sphere->radius - hitInfo.penetration) + sphere->position->x;
 			hitInfo.hitPos.y = mulf32(-hitInfo.normal.y, sphere->radius - hitInfo.penetration) + sphere->position->y;
