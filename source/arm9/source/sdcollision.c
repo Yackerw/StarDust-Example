@@ -9,7 +9,7 @@
 #define COLLISION_DTCM
 #define COLLISION_DTCM_SIZE 0x800 // reserve 0x800 shorts for collision DTCM data; or, in other words, 4 KB out of the 16 available
 
-#define GJK_LENIENCY 16
+#define GJK_LENIENCY 32
 // note: barely noticeable slowdown from this, and fixes a bug with large polygons
 #define FLOATBARY
 //#define BARY64
@@ -1339,53 +1339,6 @@ f32 LineDistFromOrigin(Vec3 *d, Vec3 *a, Vec3 *b, int *vertOut) {
 }
 
 f32 OriginDistTri(Vec3* a, Vec3* b, Vec3* c, int *edgeOut) {
-
-	/*Vec3 d0, d1, d2;
-
-	Vec3Subtraction(b, a, &d1);
-	Vec3Subtraction(c, a, &d2);
-
-	d0.x = a->x;
-	d0.y = a->y;
-	d0.z = a->z;
-
-	// specialized barycentric coordinates...
-	f32 d11 = SqrMagnitude(&d1);
-	f32 d22 = SqrMagnitude(&d2);
-	f32 d01 = DotProduct(&d0, &d1);
-	f32 d20 = DotProduct(&d2, &d0);
-	f32 d21 = DotProduct(&d2, &d1);
-
-	//f32 denom = mulf32(d11, d22) - mulf32(d21, d21);
-	float denom = d11 * d22 - d21 * d21;
-	f32 s, t;
-	if (denom == 0) {
-		// degenerate triangle error handler, just check the lines/points
-		s = -1;
-		t = -1;
-	}
-	else {
-		s = divf32f(mulf32(d20, d21) - mulf32(d22, d01), denom);
-		t = divf32f(mulf32(-s, d21) - d20, d22);
-	}
-
-	f32 dist;
-
-	if (s >= 0
-		&& t >= 0
-		&& t + s <= 4096) {
-
-		dist = mulf32(mulf32(s, s), d11);
-		dist += mulf32(mulf32(t, t), d22);
-		dist += mulf32(mulf32(s * 2, t), d21);
-		dist += mulf32(s * 2, d01);
-		dist += mulf32(t * 2, d20);
-		dist += SqrMagnitude(a);
-		if (edgeOut != NULL) {
-			*edgeOut = FACE_INTERIOR;
-		}
-	}*/
-	// fuck
 	Vec3 faceNormal;
 	NormalFromVertsInt(a, b, c, &faceNormal);
 	f32 dist = DotProduct(&faceNormal, a);
@@ -1717,21 +1670,15 @@ Vec3 OriginOnLine(Vec3* p1, Vec3* p2) {
 	closestPoint.y = p1->y - working.y;
 	closestPoint.z = p1->z - working.z;
 
-	// if distance to closest point is greater than the spheres radius, no collision
-	working.x = -closestPoint.x;
-	working.y = -closestPoint.y;
-	working.z = -closestPoint.z;
 	// okay, get magnitude between the points. if
 	// the distance between the two points of the line and the closest point is equal to the distance between
 	// the two points of the line, then it's on the line and we return true
-	f32 magLine = SqrMagnitude(&working3);
+	f32 magLine = Magnitude(&working3);
 	Vec3Subtraction(p1, &closestPoint, &working);
 	f32 magPoint1 = Magnitude(&working);
 	Vec3Subtraction(p2, &closestPoint, &working);
 	f32 magPoint2 = Magnitude(&working);
 	magPoint1 += magPoint2;
-	// this saves us 1 (one) sqrt call for magLine. worth, I think.
-	magPoint1 = mulf32(magPoint1, magPoint1);
 	// add a little leniency for, uh...lack of precision
 	if (magPoint1 >= magLine + GJK_LENIENCY) {
 		return *p1;
@@ -1873,7 +1820,7 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 
 			// new vert isn't further away, we're done
 			f32 newPointDist = DotProduct(&p1, &tmpNorm);
-			if (newPointDist <= (shortestDist + GJK_LENIENCY) || shortestDist <= GJK_LENIENCY) {
+			if (newPointDist <= (shortestDist + GJK_LENIENCY)) {
 				*outPenetration = shortestDist;
 				*outNormal = tmpNorm2;
 				return true;
