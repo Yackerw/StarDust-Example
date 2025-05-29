@@ -1747,7 +1747,7 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 	polyVerts[0] = simplex.points[0];
 	polyVerts[1] = simplex.points[1];
 	polyVerts[2] = simplex.points[2];
-	polyVerts[3] = simplex.points[3];
+	polyVerts[3] = simplex.points[3]; // TODO: if simplex has a plane that falls on origin, generate a NEW simplex using that face as reference
 
 	polyTris[0] = 0;
 	polyTris[1] = 1;
@@ -1933,7 +1933,7 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 						triInd += 3;
 						//WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd + 1);
 						//LoadDebugPolytope(polyTris, polyVerts, &triInd, &vertInd, "TestModel12.dbp");
-						break;
+						//break;
 					}
 				}
 				++vertInd;
