@@ -1761,9 +1761,9 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 	polyTris[7] = 0;
 	polyTris[8] = 2;
 
-	polyTris[9] = 3;
+	polyTris[9] = 1;
 	polyTris[10] = 0;
-	polyTris[11] = 1;
+	polyTris[11] = 3;
 
 	// the ordering of triangles shouldn't really matter so long as the abs value is used...
 	int triInd = 12;
@@ -1797,6 +1797,8 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 			}
 		}
 
+		//WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd);
+
 		// expand polytope! tessellate the face or edge
 		if (shortestEdge == FACE_INTERIOR) {
 			Vec3 tmpNorm;
@@ -1804,7 +1806,7 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 			// more precise distance value
 			shortestDist = DotProduct(&polyVerts[polyTris[shortestTri]], &tmpNorm);
 			// ensure the normal faces away from origin
-			if (shortestDist < 0) {
+			if (shortestDist < -1) {
 				tmpNorm.x = -tmpNorm.x;
 				tmpNorm.y = -tmpNorm.y;
 				tmpNorm.z = -tmpNorm.z;
@@ -1833,9 +1835,9 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 				polyTris[triInd + 1] = polyTris[shortestTri];
 				polyTris[triInd + 2] = polyTris[shortestTri + 1];
 
-				polyTris[triInd + 3] = vertInd;
+				polyTris[triInd + 3] = polyTris[shortestTri + 2];
 				polyTris[triInd + 4] = polyTris[shortestTri];
-				polyTris[triInd + 5] = polyTris[shortestTri + 2];
+				polyTris[triInd + 5] = vertInd;
 
 				polyTris[shortestTri] = vertInd;
 
@@ -1866,7 +1868,7 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 
 			// new vert isn't further away, we're done
 			f32 dist = DotProduct(&p1, outNormal);
-			if (dist <= (DotProduct(&closestPoint, outNormal) + GJK_LENIENCY) || VecEqual(&p1, &polyVerts[thirdVert])) {
+			if (dist <= shortestDist + GJK_LENIENCY || VecEqual(&p1, &polyVerts[thirdVert])) {
 				*outPenetration = shortestDist;
 				*outNormal = tmpNorm;
 				return true;
@@ -1929,6 +1931,9 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 							break;
 						}
 						triInd += 3;
+						//WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd + 1);
+						//LoadDebugPolytope(polyTris, polyVerts, &triInd, &vertInd, "TestModel12.dbp");
+						break;
 					}
 				}
 				++vertInd;
