@@ -861,3 +861,54 @@ long long Int64Div(int left, int right) {
 bool VecEqual(Vec3 *a, Vec3 *b) {
 	return (a->x == b->x) && (a->y == b->y) && (a->z == b->z);
 }
+
+#ifdef _NOTDS
+m4x4 matrices[32];
+int matrixStackPos = 0;
+#else
+volatile unsigned int* GXSTAT = (volatile unsigned int*)0x04000600;
+volatile unsigned int* POS_TEST = (volatile unsigned int*)0x040005C4;
+Vec3* POS_RESULT = (Vec3*)0x04000620;
+#endif
+
+int PushMatrixStack(m4x4* matrix) {
+#ifdef _NOTDS
+	matrices[matrixStackPos] = *matrix;
+	return matrixStackPos++;
+#else
+	glPushMatrix();
+	glLoadMatrix4x4(matrix);
+	return ((*GXSTAT) >> 8) & 31;
+#endif
+}
+
+void PopMatrixStack(int count) {
+#ifdef _NOTDS
+	matrixStackPos -= count;
+	if (matrixStackPos < 0) {
+		matrixStackPos = 0;
+	}
+#else
+	glPopMatrix(count);
+#endif
+}
+
+void RestoreMatrixStack(int stackPos) {
+#ifdef _NOTDS
+	matrices[matrixStackPos] = matrices[stackPos];
+#else
+	glRestoreMatrix(stackPos);
+#endif
+}
+
+Vec3 MultiplyVectorByMatrixStack(const Vec3* v) {
+#ifdef _NOTDS
+	Vec3 retValue;
+	MatrixTimesVec3(&matrices[matrixStackPos], v, &retValue);
+	return retValue;
+#else
+	* POS_TEST = ((v->y) << 16) | (v->x & 0xFFFF);
+	*POS_TEST = v->z;
+	return *POS_RESULT;
+#endif
+}

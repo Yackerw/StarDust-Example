@@ -43,7 +43,8 @@ typedef struct {
 	Vec3* position;
 	Vec3 extents;
 	Quaternion* rotation;
-	f32 cachedMagnitude;
+	//f32 cachedMagnitude;
+	int matrixId;
 } CollisionBox;
 
 typedef struct {

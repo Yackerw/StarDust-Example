@@ -244,6 +244,14 @@ long long Int64Div(int left, int right);
 
 bool VecEqual(Vec3* a, Vec3* b);
 
+int PushMatrixStack(m4x4* matrix);
+
+void PopMatrixStack(int count);
+
+void RestoreMatrixStack(int stackPos);
+
+Vec3 MultiplyVectorByMatrixStack(const Vec3* v);
+
 // introduced as libnds' built in divf32 is written incorrectly, causing it to actually take twice as long as it should!
 static inline f32 divf32f(int left, int right) {
 #ifndef _NOTDS

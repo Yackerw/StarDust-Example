@@ -524,13 +524,6 @@ ITCM_CODE void ProcessObjects() {
 		currObject = currObject->next;
 	}
 
-	// we must ensure the projection matrix is identity here, because updateanimator uses the matrix hardware!
-#ifndef _NOTDS
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glMatrixMode(GL_POSITION);
-#endif
-
 	//late update
 	currObject = firstObject.next;
 	while (currObject != NULL) {
@@ -642,6 +635,11 @@ ITCM_CODE void ProcessObjects() {
 		}
 		multipassSecondaryBank = !multipassSecondaryBank;
 	}
+
+	// reset matrices so we can use it for math later
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glMatrixMode(GL_POSITION); // may need to change to GL_MODELVIEW if we ever want to make proper use of vec test; but for now, keeping it to pos only makes it faster.
 
 	glClearDepth(GL_MAX_DEPTH); // this technically only needs to be initialized once, but whatever, idc
 #else

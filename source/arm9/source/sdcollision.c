@@ -266,16 +266,14 @@ ITCM_CODE bool SphereOnLine(CollisionSphere *sphere, Vec3 *p1, Vec3 *p2, Vec3 *c
 	// okay, get magnitude between the points. if
 	// the distance between the two points of the line and the closest point is equal to the distance between
 	// the two points of the line, then it's on the line and we return true
-	f32 magLine = SqrMagnitude(&working3);
+	f32 magLine = Magnitude(&working3);
 	Vec3Subtraction(p1, closestPoint, &working);
 	f32 magPoint1 = Magnitude(&working);
 	Vec3Subtraction(p2, closestPoint, &working);
 	f32 magPoint2 = Magnitude(&working);
 	magPoint1 += magPoint2;
-	// this saves us 1 (one) sqrt call for magLine. worth, I think.
-	magPoint1 = mulf32(magPoint1, magPoint1);
 	// add a little leniency for, uh...lack of precision
-	if (magPoint1 <= magLine + 32 && magPoint1 >= magLine - 32) {
+	if (magPoint1 <= magLine + 16 && magPoint1 >= magLine - 16) {
 		return true;
 	}
 	
@@ -1702,7 +1700,9 @@ const int EPAEdgeTarget[] = {
 	-1 // 2-2
 };
 
-/*void WriteDebugPolytope(unsigned char* inds, Vec3* verts, int indsCount, int vertsCount) {
+//#define DEBUG_POLYTOPE
+#ifdef DEBUG_POLYTOPE
+void WriteDebugPolytope(unsigned char* inds, Vec3* verts, int indsCount, int vertsCount) {
 	char tmpName[1024];
 	sprintf(tmpName, "TestModel%i.dbp", indsCount);
 	FILE* f = fopen(tmpName, "wb");
@@ -1720,7 +1720,8 @@ void LoadDebugPolytope(unsigned char* inds, Vec3* verts, int* indsCount, int* ve
 	fread(inds, 1, *indsCount, f);
 	fread(verts, 12, *vertsCount, f);
 	fclose(f);
-}*/
+}
+#endif
 
 bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Origin,
 	Vec3(*findPointSupport1)(void* shape, Vec3* normal), Vec3(*findPointSupport2)(void* shape, Vec3* normal),
@@ -1796,8 +1797,9 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 				shortestEdge = edge;
 			}
 		}
-
-		//WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd);
+#ifdef DEBUG_POLYTOPE
+		WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd);
+#endif
 
 		// expand polytope! tessellate the face or edge
 		if (shortestEdge == FACE_INTERIOR) {
@@ -1931,12 +1933,16 @@ bool GJKWithInfo(void* shape1, void* shape2, Vec3* shape1Origin, Vec3* shape2Ori
 							break;
 						}
 						triInd += 3;
-						//WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd + 1);
-						//LoadDebugPolytope(polyTris, polyVerts, &triInd, &vertInd, "TestModel12.dbp");
-						//break;
+#ifdef DEBUG_POLYTOPE
+						WriteDebugPolytope(polyTris, polyVerts, triInd, vertInd + 1);
+						LoadDebugPolytope(polyTris, polyVerts, &triInd, &vertInd, "TestModel12.dbp");
+						break;
+#endif
 					}
 				}
+#ifndef DEBUG_POLYTOPE
 				++vertInd;
+#endif
 			}
 		}
 		else {
