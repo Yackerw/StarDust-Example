@@ -3703,7 +3703,12 @@ void SetupCameraMatrixPartial(int x, int y, int width, int height) {
 	//m4x4 trueCameraMatrix;
 	//MatrixToDSMatrix(&cameraMatrix, &trueCameraMatrix);
 	glMultMatrix4x4(&cameraMatrix);
-
+	if (x == 128) {
+		x = 0;
+	}
+	else {
+		x = 128;
+	}
 	glViewport(x, y, (x+width)-1, (y+height)-1);
 }
 #else
@@ -3859,8 +3864,8 @@ void Initialize3D(bool multipass, bool subBGFull) {
 		vramSetBankD(VRAM_D_LCD);
 		videoSetMode(MODE_3_3D);
 		vramSetBankB(VRAM_B_LCD);
-		storageTexture = (unsigned short*)malloc(sizeof(unsigned short) * 256 * 192);
-		memset(storageTexture, 0xFFFFFFFF, sizeof(unsigned short) * 256 * 192);
+		//storageTexture = (unsigned short*)malloc(sizeof(unsigned short) * 256 * 192);
+		//memset(storageTexture, 0xFFFFFFFF, sizeof(unsigned short) * 256 * 192);
 	}
 	else {
 		vramSetBankD(VRAM_D_TEXTURE);

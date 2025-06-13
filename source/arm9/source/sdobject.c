@@ -551,7 +551,9 @@ ITCM_CODE void ProcessObjects() {
 #ifndef _NOTDS
 	glClearPolyID(0x1F);
 	glClearColor(0, 0, 0, 0x1F);
+	short* const BG0OFFS = (short*)0x04000010;
 	if (!multipassRendering) {
+		*BG0OFFS = 0;
 		// set up the camera
 		SetupCameraMatrix();
 		// disable capture
@@ -579,7 +581,7 @@ ITCM_CODE void ProcessObjects() {
 	}
 	else {
 		// we have to start by rendering the left half, then the right half
-		SetupCameraMatrixPartial(0, 0, 128, 192);
+		SetupCameraMatrixPartial(128, 0, 128, 192);
 		int targetBank = 3;
 		if (multipassSecondaryBank) {
 			targetBank = 1;
@@ -609,7 +611,7 @@ ITCM_CODE void ProcessObjects() {
 				// backtrack in time and use the settings for the previous frame
 				// change the display to display normally
 				REG_DISPCNT = (REG_DISPCNT & ~((3 << 16) | (3 << 18) | 7)) | (1 << 16) | (targetBank << 18) | 3 | (1 << 8) | (1 << 11);
-				SetupCameraMatrixPartial(128, 0, 128, 192); // applies to next glflush
+				SetupCameraMatrixPartial(0, 0, 128, 192); // applies to next glflush
 				if (multipassSecondaryBank) { // applies to next rendered frame
 					vramSetBankD(VRAM_D_MAIN_BG_0x06000000);
 					vramSetBankB(VRAM_B_LCD);
@@ -618,6 +620,7 @@ ITCM_CODE void ProcessObjects() {
 					vramSetBankB(VRAM_B_MAIN_BG_0x06000000);
 					vramSetBankD(VRAM_D_LCD);
 				}
+				*BG0OFFS = -128;
 			}
 			if (i == 1) {
 				// set up the new DISPCAPCNT to capture and render final!
@@ -633,6 +636,8 @@ ITCM_CODE void ProcessObjects() {
 				// sprites, done!
 				FinalizeSprites();
 				bgUpdate();
+				*BG0OFFS = 128; // have to modify BG0OFFS to render on the opposite side to fix rendering artifacts in the middle
+				// TODO: add a hardware/melonds check to disable this as it fails spectacularly on other emulators that aren't as accurate as melon
 			}
 		}
 		multipassSecondaryBank = !multipassSecondaryBank;
@@ -662,7 +667,7 @@ ITCM_CODE void ProcessObjects() {
 	}
 	// finally, render transparent models
 	RenderTransparentModels();
-	FinalizeSprites();
+	//FinalizeSprites();
 	// update music
 	UpdateMusicBuffer();
 

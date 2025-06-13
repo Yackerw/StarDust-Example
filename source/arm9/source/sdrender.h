@@ -312,7 +312,7 @@ void RenderTransparentModels();
 void Set3DOnTop();
 void Set3DOnBottom();
 
-void Initialize3D(bool multipass, bool subBG);
+void Initialize3D(bool multipass, bool subBGFull);
 
 void SetMaterialLightOverride(SDMaterial *material, int id, char R, char G, char B, f32 normalX, f32 normalY, f32 normalZ);
 
