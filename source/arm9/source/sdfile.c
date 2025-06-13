@@ -153,9 +153,9 @@ char* DirToNative(char* input) {
 		sprintf(retValue, "%s%s", "addons/", input + 5);
 		return retValue;
 	}
-	if (memcmp(input, "nitro:/", sizeof(char) * 4) == 0) {
-		char* retValue = (char*)malloc(strlen(input));
-		sprintf(retValue, "%s%s", "data/", input + 7);
+	if (memcmp(input, "nitro:/", sizeof(char) * 7) == 0) {
+		char* retValue = (char*)malloc(strlen(input) + 5);
+		sprintf(retValue, "%s%s", "nitrofiles/", input + 7);
 		return retValue;
 	}
 	// fallback; already native

@@ -96,7 +96,7 @@
     <ClCompile Include="..\arm9\source\sdinput.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\arm9\source\sdgjk.c">
+    <ClCompile Include="..\arm9\source\sdgjksupport.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -158,7 +158,7 @@
     <ClInclude Include="..\arm9\source\sdinput.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\arm9\source\sdgjk.h">
+    <ClInclude Include="..\arm9\source\sdgjksupport.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
