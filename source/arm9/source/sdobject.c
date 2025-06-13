@@ -662,7 +662,7 @@ ITCM_CODE void ProcessObjects() {
 	}
 	// finally, render transparent models
 	RenderTransparentModels();
-	//FinalizeSprites();
+	FinalizeSprites();
 	// update music
 	UpdateMusicBuffer();
 
