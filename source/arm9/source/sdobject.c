@@ -556,6 +556,7 @@ ITCM_CODE void ProcessObjects() {
 		SetupCameraMatrix();
 		// disable capture
 		REG_DISPCAPCNT = 0;
+		RenderModelQueue(true);
 		currObject = firstObject.next;
 		while (currObject != NULL) {
 			if (currObject->mesh != NULL && !currObject->culled) {
@@ -585,6 +586,7 @@ ITCM_CODE void ProcessObjects() {
 		}
 		// okay, now we render twice regularly
 		for (int i = 0; i < 2; ++i) {
+			RenderModelQueue(i == 1);
 			currObject = firstObject.next;
 			while (currObject != NULL) {
 				if (currObject->mesh != NULL && !currObject->culled) {
@@ -645,6 +647,7 @@ ITCM_CODE void ProcessObjects() {
 #else
 	// set up the camera
 	SetupCameraMatrix();
+	RenderModelQueue(true);
 	currObject = firstObject.next;
 	while (currObject != NULL) {
 		if (currObject->mesh != NULL && !currObject->culled) {
@@ -659,7 +662,7 @@ ITCM_CODE void ProcessObjects() {
 	}
 	// finally, render transparent models
 	RenderTransparentModels();
-	FinalizeSprites();
+	//FinalizeSprites();
 	// update music
 	UpdateMusicBuffer();
 

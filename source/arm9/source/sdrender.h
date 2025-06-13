@@ -316,7 +316,8 @@ void Initialize3D(bool multipass, bool subBG);
 
 void SetMaterialLightOverride(SDMaterial *material, int id, char R, char G, char B, f32 normalX, f32 normalY, f32 normalZ);
 
-//void SaveLCD();
-//void RestoreLCD();
+void QueueModelRender(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation, SDMaterial* mats, Animator* animator, int renderPriority);
+
+void RenderModelQueue(bool flush);
 
 #endif

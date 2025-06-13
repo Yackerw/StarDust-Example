@@ -133,8 +133,6 @@ int main() {
 		
 		ProcessObjects();
 
-		FinalizeSprites();
-
 #ifdef _WIN32
 		if (GetWindowClosing()) {
 			break;

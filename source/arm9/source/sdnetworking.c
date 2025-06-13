@@ -493,7 +493,7 @@ void UpdateNetworking(NetworkInstance* instance, f32 deltaTime) {
 				if (instance->importantStackUsed[i][resendStartPos]) {
 					// todo: change this to incorporate ping
 					instance->packetTimeout[i][resendStartPos] += deltaTime;
-					if (instance->packetTimeout[i][resendStartPos] > Fixed32ToNative(1228)) {
+					if (instance->packetTimeout[i][resendStartPos] > (1228)) {
 						instance->packetTimeout[i][resendStartPos] = 0;
 						SendToAbstract(instance->socket, instance->importantStack[i][resendStartPos], instance->importantStackSizes[i][resendStartPos], instance->clients[i]);
 					}
@@ -502,7 +502,7 @@ void UpdateNetworking(NetworkInstance* instance, f32 deltaTime) {
 				resendStartPos %= instance->maxPackets;
 			}
 			instance->socketTimeout[i] += deltaTime;
-			if (instance->socketTimeout[i] >= Fixed32ToNative(4096 * 20)) {
+			if (instance->socketTimeout[i] >= (4096 * 20)) {
 				CloseConn(i, 0, instance);
 			}
 		}

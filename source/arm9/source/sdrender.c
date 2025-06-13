@@ -33,6 +33,16 @@ typedef struct {
 } ModelDrawCall;
 
 typedef struct {
+	Vec3 position;
+	Vec3 scale;
+	Quaternion rotation;
+	SDMaterial* materials;
+	Animator* animator;
+	Model* model;
+	int renderPriority;
+} QueueRenderModel;
+
+typedef struct {
 	Sprite* sprite;
 	short x;
 	short y;
@@ -54,6 +64,10 @@ int spriteMatrixId;
 ModelDrawCall* modelDrawCalls;
 int modelDrawCallCount;
 int modelDrawCallAllocated;
+
+QueueRenderModel* modelRenderQueue;
+int modelRenderQueueCount;
+int modelRenderQueueAllocated;
 
 Vec3 cameraRecentering;
 
@@ -988,6 +1002,26 @@ void UpdateModel(Model* model) {
 	}
 	model->NativeModel = nativeModel;
 #endif
+}
+
+ITCM_CODE void QueueModelRender(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation, SDMaterial* mats, Animator* animator, int renderPriority) {
+	if (modelRenderQueueAllocated == 0) {
+		modelRenderQueueAllocated = 32;
+		modelRenderQueue = (QueueRenderModel*)malloc(sizeof(QueueRenderModel) * 32);
+	}
+	// expand if we need more ram
+	if (modelRenderQueueAllocated == modelRenderQueueCount) {
+		modelRenderQueueAllocated *= 1.5f;
+		modelRenderQueue = (QueueRenderModel*)realloc(modelRenderQueue, sizeof(QueueRenderModel) * modelRenderQueueAllocated);
+	}
+	modelRenderQueue[modelRenderQueueCount].position = position[0];
+	modelRenderQueue[modelRenderQueueCount].scale = scale[0];
+	modelRenderQueue[modelRenderQueueCount].rotation = rotation[0];
+	modelRenderQueue[modelRenderQueueCount].materials = mats;
+	modelRenderQueue[modelRenderQueueCount].animator = animator;
+	modelRenderQueue[modelRenderQueueCount].renderPriority = renderPriority;
+	modelRenderQueue[modelRenderQueueCount].model = model;
+	++modelRenderQueueCount;
 }
 
 #ifndef _NOTDS
@@ -3866,6 +3900,21 @@ void SetMaterialLightOverride(SDMaterial* material, int id, char R, char G, char
 		material->lightNormal3Pt0 = lightNormal & 0xFF;
 		material->lightNormal3Pt1 = (lightNormal >> 8) & 0xFF;
 		break;
+	}
+}
+
+void RenderModelQueue(bool flush) {
+	for (int i = 0; i < modelRenderQueueCount; ++i) {
+		QueueRenderModel* currRender = &modelRenderQueue[i];
+		if (currRender->animator != NULL) {
+			RenderModelRigged(currRender->model, &currRender->position, &currRender->scale, &currRender->rotation, currRender->materials, currRender->animator, currRender->renderPriority);
+		}
+		else {
+			RenderModel(currRender->model, &currRender->position, &currRender->scale, &currRender->rotation, currRender->materials, currRender->renderPriority);
+		}
+	}
+	if (flush) {
+		modelRenderQueueCount = 0;
 	}
 }
 
