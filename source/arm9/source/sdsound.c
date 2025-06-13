@@ -725,7 +725,7 @@ void PlayMusic(char* filedir, int offset) {
 	}
 	else {
 		sd.loopStart = 0;
-		sd.loopEnd = 0;
+		sd.loopEnd = currMusic->dataSize/currMusic->bytesPerSample;
 	}
 	currMusicId = PlaySoundOffset(&sd, offset);
 }
