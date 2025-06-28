@@ -478,9 +478,183 @@ void LoadTextureAsync(char* input, bool upload, void (*callBack)(void* data, Tex
 
 #ifndef _NOTDS
 unsigned int FIFOLookup[] = { FIFO_COMMAND_PACK(FIFO_NORMAL, FIFO_TEX_COORD, FIFO_VERTEX16, FIFO_NORMAL), FIFO_COMMAND_PACK(FIFO_TEX_COORD, FIFO_VERTEX16, FIFO_NORMAL, FIFO_TEX_COORD), FIFO_COMMAND_PACK(FIFO_VERTEX16, FIFO_NORMAL, FIFO_TEX_COORD, FIFO_VERTEX16) };
-#endif
+#define FIFO_MTX_RESTORE (0x50 >> 2)
+#define FIFO_VTX_DIFF (0xA0 >> 2)
 
-#define FIFO_MTX_RESTORE 0x50 >> 2
+#define CMD_TEXCOORD 1
+#define CMD_NORMAL 2
+#define CMD_POS 3
+#define CMD_MTX 4
+#define CMD_TRI 5
+#define CMD_TRI_STRIP 6
+#define CMD_QUAD 7
+#define CMD_QUAD_STRIP 8
+
+struct GFXFIFOBuilder {
+	unsigned int* commands;
+	int usedMemory;
+	int allocatedMemory;
+	bool DTCM;
+	bool initializedVert;
+	char currCommand;
+	char prevMtx; // placing it here makes better use of memory
+	int commandInd;
+	unsigned int prevUV;
+	unsigned int prevNormal;
+	Vec3s prevVert;
+};
+
+struct GFXFIFOBuilder InitFIFO() {
+	struct GFXFIFOBuilder ret;
+	ret.commands = (unsigned int*)malloc(1024 * 16);//0x02FF0000; // DTCM base
+	ret.allocatedMemory = 1024 * 16 / 4; // 16KB DTCM
+	ret.usedMemory = 2;
+	ret.DTCM = false;
+	ret.currCommand = 0;
+	ret.commandInd = 1;
+	ret.commands[1] = 0;
+	ret.prevUV = 0xFFFFFFFF; // lousy
+	ret.prevNormal = 0;
+	ret.prevVert.x = 0;
+	ret.prevVert.y = 0;
+	ret.prevVert.z = 0;
+	ret.initializedVert = false;
+	ret.prevMtx = -1;
+	return ret;
+}
+
+void IncrementFIFO(struct GFXFIFOBuilder* fifo) {
+	fifo->usedMemory += 1;
+	if (fifo->usedMemory == fifo->allocatedMemory) {
+		int oldMemorySize = fifo->allocatedMemory;
+		fifo->allocatedMemory *= 1.5f; // generally a decent scale
+		if (fifo->DTCM) {
+			unsigned int* newAlloc = (unsigned int*)malloc(sizeof(unsigned int) * fifo->allocatedMemory);
+			memcpy(newAlloc, fifo->commands, sizeof(unsigned int) * oldMemorySize);
+			fifo->commands = newAlloc;
+			fifo->DTCM = false;
+		}
+		else {
+			fifo->commands = realloc(fifo->commands, sizeof(unsigned int)*fifo->allocatedMemory);
+		}
+	}
+}
+
+void PushFIFOCommand(struct GFXFIFOBuilder* fifo, unsigned char command, int commandArg1, int commandArg2, int commandArg3) {
+	int packBitShift = fifo->currCommand * 8;
+	switch (command) {
+	case CMD_TEXCOORD:
+		unsigned int currUV = (commandArg1 & 0xFFFF) | (commandArg2 << 16);
+		if (fifo->prevUV != currUV) {
+			fifo->commands[fifo->commandInd] |= FIFO_TEX_COORD << packBitShift;
+			fifo->commands[fifo->usedMemory] = currUV;
+			fifo->prevUV = currUV;
+			IncrementFIFO(fifo);
+		}
+		else {
+			return;
+		}
+		// TODO: add a mode to force this to always write due to how sphere mapping works
+		break;
+	case CMD_NORMAL:
+		if (fifo->prevNormal != commandArg1) {
+			fifo->commands[fifo->commandInd] |= FIFO_NORMAL << packBitShift;
+			fifo->commands[fifo->usedMemory] = commandArg1;
+			fifo->prevNormal = commandArg1;
+			IncrementFIFO(fifo);
+		}
+		else {
+			return;
+		}
+		// TODO: add a mode to force this to always write due to how sphere mapping works
+		break;
+	case CMD_POS:
+		int diffX = (commandArg1 - fifo->prevVert.x);
+		int diffY = (commandArg2 - fifo->prevVert.y);
+		int diffZ = (commandArg3 - fifo->prevVert.z);
+		if (f32abs(diffX) < 512 && f32abs(diffY) < 512 && f32abs(diffZ) < 512 && fifo->initializedVert) {
+			fifo->commands[fifo->commandInd] |= FIFO_VTX_DIFF << packBitShift;
+			fifo->commands[fifo->usedMemory] = (diffX & 0x3FF) | ((diffY & 0x3FF) << 10) | ((diffZ & 0x3FF) << 20);
+			IncrementFIFO(fifo);
+		}
+		else {
+			fifo->commands[fifo->commandInd] |= FIFO_VERTEX16 << packBitShift;
+			fifo->commands[fifo->usedMemory] = (commandArg1 & 0xFFFF) | (commandArg2 << 16);
+			IncrementFIFO(fifo);
+			fifo->commands[fifo->usedMemory] = commandArg3;
+			IncrementFIFO(fifo);
+			fifo->initializedVert = true;
+		}
+		fifo->prevVert.x = commandArg1;
+		fifo->prevVert.y = commandArg2;
+		fifo->prevVert.z = commandArg3;
+		break;
+	case CMD_MTX:
+		if (fifo->prevMtx != commandArg1) {
+			fifo->commands[fifo->commandInd] |= FIFO_MTX_RESTORE << packBitShift;
+			fifo->commands[fifo->usedMemory] = commandArg1;
+			IncrementFIFO(fifo);
+			fifo->prevMtx = commandArg1;
+			// invalidate normal
+			fifo->prevNormal = 0;
+		}
+		else {
+			return;
+		}
+		break;
+	case CMD_TRI:
+		fifo->commands[fifo->commandInd] |= FIFO_BEGIN << packBitShift;
+		fifo->commands[fifo->usedMemory] = GL_TRIANGLE;
+		IncrementFIFO(fifo);
+		break;
+	case CMD_TRI_STRIP:
+		fifo->commands[fifo->commandInd] |= FIFO_BEGIN << packBitShift;
+		fifo->commands[fifo->usedMemory] = GL_TRIANGLE_STRIP;
+		IncrementFIFO(fifo);
+		break;
+	case CMD_QUAD:
+		fifo->commands[fifo->commandInd] |= FIFO_BEGIN << packBitShift;
+		fifo->commands[fifo->usedMemory] = GL_QUAD;
+		IncrementFIFO(fifo);
+		break;
+	case CMD_QUAD_STRIP:
+		fifo->commands[fifo->commandInd] |= FIFO_BEGIN << packBitShift;
+		fifo->commands[fifo->usedMemory] = GL_QUAD_STRIP;
+		IncrementFIFO(fifo);
+		break;
+	default:
+		fifo->commands[fifo->commandInd] |= FIFO_NOP << packBitShift;
+		break;
+	}
+	fifo->currCommand += 1;
+	if (fifo->currCommand == 4) {
+		fifo->currCommand = 0;
+		fifo->commandInd = fifo->usedMemory;
+		fifo->commands[fifo->commandInd] = 0;
+		IncrementFIFO(fifo);
+	}
+}
+
+unsigned int* FinalizeFIFO(struct GFXFIFOBuilder* fifo) {
+	fifo->commands[0] = fifo->usedMemory - 1;
+	if (fifo->currCommand != 0) {
+		while (fifo->currCommand != 4) {
+			fifo->commands[fifo->commandInd] |= FIFO_NOP << (fifo->currCommand * 8);
+			++fifo->currCommand;
+		}
+	}
+	if (!fifo->DTCM) {
+		return realloc(fifo->commands, sizeof(unsigned int) * fifo->usedMemory);
+	}
+	else {
+		unsigned int* retValue = (unsigned int*)malloc(sizeof(unsigned int) * fifo->usedMemory);
+		memcpy(retValue, fifo->commands, sizeof(unsigned int) * fifo->usedMemory);
+		return retValue;
+	}
+}
+
+
+#endif
 
 #ifndef _NOTDS
 void CacheRiggedModel(Model* reference) {
@@ -490,135 +664,45 @@ void CacheRiggedModel(Model* reference) {
 	DSNativeModel dsnm;
 	dsnm.FIFOCount = reference->vertexGroupCount;
 	dsnm.FIFOBatches = (unsigned int**)malloc(sizeof(unsigned int*) * reference->vertexGroupCount);
-	VertexHeader* currHeader = &reference->vertexGroups[0];
+	const VertexHeader* currHeader = &reference->vertexGroups[0];
 	for (int i = 0; i < reference->vertexGroupCount; ++i) {
-		int vertCount = currHeader->count;
-		if (vertCount == 0) {
+		if (currHeader->count == 0) {
 			dsnm.FIFOBatches[i] = NULL;
 			uint32_t toAdd = (sizeof(Vertex) * (currHeader->count));
 			currHeader = (VertexHeader*)(((uint32_t)(&(currHeader->vertices))) + toAdd);
 			continue;
 		}
-		// ack...
-		int FIFOCount;
-		int NOPCount;
-		FIFOCount = vertCount * 3 + 1;
-		// iterate over verts as well and add 1 for each bone change
-		Vertex* vertices = &currHeader->vertices;
-		int currBone = -1;
-		int FIFOCountLaterAddition = 0;
-		for (int j = 0; j < vertCount; ++j) {
-			if (vertices[j].boneID != currBone) {
-				++FIFOCount;
-				++FIFOCountLaterAddition;
-				currBone = vertices[j].boneID;
-			}
-		}
-		NOPCount = 4 - (FIFOCount % 4);
-		if (NOPCount == 4) {
-			NOPCount = 0;
-		}
-		FIFOCount /= 4;
-		if (NOPCount != 0) {
-			FIFOCount += 1;
-		}
-		// agghh
-		FIFOCount += FIFOCountLaterAddition + vertCount * 4 + 1;
-		// now generate FIFO batch
-		unsigned int* FIFOBatch = (unsigned int*)malloc(sizeof(unsigned int) * (FIFOCount + 1));
-		int currVert = 0;
-		int FIFOBatchPosition = 6;
-		// FIFO size
-		FIFOBatch[0] = FIFOCount;
-		// initial one with GFX BEGIN and such
-		FIFOBatch[1] = FIFO_COMMAND_PACK(FIFO_BEGIN, FIFO_MTX_RESTORE, FIFO_NORMAL, FIFO_TEX_COORD);
-		// pack the data
+		struct GFXFIFOBuilder fifo = InitFIFO();
 		if (currHeader->bitFlags & VTX_QUAD) {
 			if (currHeader->bitFlags & VTX_STRIPS) {
-				FIFOBatch[2] = GL_QUAD_STRIP;
+				PushFIFOCommand(&fifo, CMD_QUAD_STRIP, 0, 0, 0);
 			}
 			else {
-				FIFOBatch[2] = GL_QUAD;
+				PushFIFOCommand(&fifo, CMD_QUAD, 0, 0, 0);
 			}
 		}
 		else {
 			if (currHeader->bitFlags & VTX_STRIPS) {
-				FIFOBatch[2] = GL_TRIANGLE_STRIP;
+				PushFIFOCommand(&fifo, CMD_TRI_STRIP, 0, 0, 0);
 			}
 			else {
-				FIFOBatch[2] = GL_TRIANGLE;
+				PushFIFOCommand(&fifo, CMD_TRI, 0, 0, 0);
 			}
 		}
-		FIFOBatch[3] = vertices[0].boneID;
-		FIFOBatch[4] = vertices[0].normal;
-		FIFOBatch[5] = TEXTURE_PACK(vertices[0].u, vertices[0].v);
 
-		int subVert = 3;
-		currBone = vertices[0].boneID;
-		while (currVert < vertCount) {
-			unsigned char toPack[4];
-			int storedBatchPosition = FIFOBatchPosition;
-			++FIFOBatchPosition;
-			for (int k = 0; k < 4; ++k) {
-				switch (subVert) {
-				case 1:
-					if (currVert < vertCount) {
-						toPack[k] = FIFO_NORMAL;
-						FIFOBatch[FIFOBatchPosition] = vertices[currVert].normal;
-					}
-					else {
-						toPack[k] = FIFO_NOP;
-					}
-					break;
-				case 2:
-					if (currVert < vertCount) {
-						toPack[k] = FIFO_TEX_COORD;
-						FIFOBatch[FIFOBatchPosition] = TEXTURE_PACK(vertices[currVert].u, vertices[currVert].v);
-					}
-					else {
-						toPack[k] = FIFO_NOP;
-					}
-					break;
-				case 3:
-					if (currVert < vertCount) {
-						toPack[k] = FIFO_VERTEX16;
-						FIFOBatch[FIFOBatchPosition] = VERTEX_PACK(vertices[currVert].x, vertices[currVert].y);
-						++FIFOBatchPosition;
-						FIFOBatch[FIFOBatchPosition] = vertices[currVert].z;
-						++currVert;
-						subVert = -1;
-					}
-					else {
-						toPack[k] = FIFO_NOP;
-					}
-					break;
-				case 0:
-					if (currVert < vertCount) {
-						if (vertices[currVert].boneID != currBone) {
-							toPack[k] = FIFO_MTX_RESTORE;
-							FIFOBatch[FIFOBatchPosition] = vertices[currVert].boneID;
-							currBone = vertices[currVert].boneID;
-						}
-						else {
-							--k;
-							++subVert;
-							continue;
-						}
-					}
-					else {
-						toPack[k] = FIFO_NOP;
-					}
-					break;
-				}
-				++subVert;
-				++FIFOBatchPosition;
-			}
-			FIFOBatch[storedBatchPosition] = FIFO_COMMAND_PACK(toPack[0], toPack[1], toPack[2], toPack[3]);
+		Vertex* vertices = &currHeader->vertices;
+
+		for (int j = 0; j < currHeader->count; ++j) {
+			PushFIFOCommand(&fifo, CMD_MTX, vertices[j].boneID, 0, 0);
+			PushFIFOCommand(&fifo, CMD_TEXCOORD, vertices[j].u, vertices[j].v, 0);
+			PushFIFOCommand(&fifo, CMD_NORMAL, vertices[j].normal, 0, 0);
+			PushFIFOCommand(&fifo, CMD_POS, vertices[j].x, vertices[j].y, vertices[j].z);
 		}
-		dsnm.FIFOBatches[i] = FIFOBatch;
+
+		dsnm.FIFOBatches[i] = FinalizeFIFO(&fifo);
 		uint32_t toAdd = (sizeof(Vertex) * (currHeader->count));
 		currHeader = (VertexHeader*)(((uint32_t)(&(currHeader->vertices))) + toAdd);
-		DC_FlushRange(FIFOBatch, sizeof(unsigned int) * (FIFOCount + 1));
+		DC_FlushRange(dsnm.FIFOBatches[i], sizeof(unsigned int) * (dsnm.FIFOBatches[i][0] + 1));
 	}
 	reference->NativeModel = malloc(sizeof(DSNativeModel));
 	DSNativeModel* dsnmptr = (DSNativeModel*)reference->NativeModel;
@@ -638,115 +722,44 @@ void CacheModel(Model* reference) {
 	dsnm.FIFOCount = reference->vertexGroupCount;
 	dsnm.FIFOBatches = (unsigned int**)malloc(sizeof(unsigned int*) * reference->vertexGroupCount);
 	// get vertex count to try and calculate FIFO count
-	VertexHeader* currHeader = &reference->vertexGroups[0];
+	const VertexHeader* currHeader = &reference->vertexGroups[0];
 	for (int i = 0; i < reference->vertexGroupCount; ++i) {
-		int vertCount = currHeader->count;
-		if (vertCount == 0) {
+		if (currHeader->count == 0) {
 			dsnm.FIFOBatches[i] = NULL;
 			uint32_t toAdd = (sizeof(Vertex) * (currHeader->count));
 			currHeader = (VertexHeader*)(((uint32_t)(&(currHeader->vertices))) + toAdd);
 			continue;
 		}
-		// each vertex makes 3/4ths of a FIFOLookup, so multiply by 3, then modulo by 4 to get the remaining number of NOPs we need
-		int FIFOCount;
-		int NOPCount;
-		// plus one for FIFO_BEGIN
-		FIFOCount = vertCount * 3 + 1;
-		NOPCount = 4 - (FIFOCount % 4);
-		if (NOPCount == 4) {
-			NOPCount = 0;
-		}
-		FIFOCount /= 4;
-		if (NOPCount != 0) {
-			FIFOCount += 1;
-		}
-		// 1 int for normal, 1 int for UV, 2 ints for position...so in other words: make space for arguments
-		int FIFOIterator = FIFOCount;
-		// plus one for FIFO_BEGIN argument
-		FIFOCount += vertCount * 4 + 1;
-
-		// now generate the FIFO batch
-		unsigned int* FIFOBatch = (unsigned int*)malloc(sizeof(unsigned int) * (FIFOCount + 1));
-		int currVert = 1;
-		int FIFOBatchPosition = 7;
-		int FIFOLookupId = 0;
-		Vertex* currVerts = &currHeader->vertices;
-		// FIFO size
-		FIFOBatch[0] = FIFOCount;
-		// initial one with GFX BEGIN and such
-		FIFOBatch[1] = FIFO_COMMAND_PACK(FIFO_BEGIN, FIFO_NORMAL, FIFO_TEX_COORD, FIFO_VERTEX16);
-		// pack the data
+		struct GFXFIFOBuilder fifo = InitFIFO();
 		if (currHeader->bitFlags & VTX_QUAD) {
 			if (currHeader->bitFlags & VTX_STRIPS) {
-				FIFOBatch[2] = GL_QUAD_STRIP;
+				PushFIFOCommand(&fifo, CMD_QUAD_STRIP, 0, 0, 0);
 			}
 			else {
-				FIFOBatch[2] = GL_QUAD;
+				PushFIFOCommand(&fifo, CMD_QUAD, 0, 0, 0);
 			}
 		}
 		else {
 			if (currHeader->bitFlags & VTX_STRIPS) {
-				FIFOBatch[2] = GL_TRIANGLE_STRIP;
+				PushFIFOCommand(&fifo, CMD_TRI_STRIP, 0, 0, 0);
 			}
 			else {
-				FIFOBatch[2] = GL_TRIANGLE;
+				PushFIFOCommand(&fifo, CMD_TRI, 0, 0, 0);
 			}
 		}
-		FIFOBatch[3] = currVerts[0].normal;
-		FIFOBatch[4] = TEXTURE_PACK(currVerts[0].u, currVerts[0].v);
-		FIFOBatch[5] = VERTEX_PACK(currVerts[0].x, currVerts[0].y);
-		FIFOBatch[6] = currVerts[0].z;
-		for (int j = 1; j < FIFOIterator; ++j) {
-			FIFOBatch[FIFOBatchPosition] = FIFOLookup[FIFOLookupId];
-			int FIFOCommandPos = FIFOBatchPosition;
-			++FIFOBatchPosition;
-			switch (FIFOLookupId) {
-			case 0:
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].normal;
-				FIFOBatch[FIFOBatchPosition++] = TEXTURE_PACK(currVerts[currVert].u, currVerts[currVert].v);
-				FIFOBatch[FIFOBatchPosition++] = VERTEX_PACK(currVerts[currVert].x, currVerts[currVert].y);
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].z;
-				++currVert;
-				if (currVert >= currHeader->count) {
-					FIFOBatch[FIFOCommandPos] = (FIFO_NOP << 24) | (FIFOBatch[FIFOCommandPos] & 0x00FFFFFF);
-					break;
-				}
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].normal;
-				break;
-			case 1:
-				FIFOBatch[FIFOBatchPosition++] = TEXTURE_PACK(currVerts[currVert].u, currVerts[currVert].v);
-				FIFOBatch[FIFOBatchPosition++] = VERTEX_PACK(currVerts[currVert].x, currVerts[currVert].y);
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].z;
-				++currVert;
-				if (currVert >= currHeader->count) {
-					FIFOBatch[FIFOCommandPos] = (FIFO_NOP << 24) | (FIFO_NOP << 16) | (FIFOBatch[FIFOCommandPos] & 0x0000FFFF);
-					break;
-				}
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].normal;
-				FIFOBatch[FIFOBatchPosition++] = TEXTURE_PACK(currVerts[currVert].u, currVerts[currVert].v);
-				break;
-			case 2:
-				FIFOBatch[FIFOBatchPosition++] = VERTEX_PACK(currVerts[currVert].x, currVerts[currVert].y);
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].z;
-				++currVert;
-				if (currVert >= currHeader->count) {
-					FIFOBatch[FIFOCommandPos] = (FIFO_NOP << 24) | (FIFO_NOP << 16) | (FIFO_NOP << 8) | (FIFOBatch[FIFOCommandPos] & 0x000000FF);
-					break;
-				}
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].normal;
-				FIFOBatch[FIFOBatchPosition++] = TEXTURE_PACK(currVerts[currVert].u, currVerts[currVert].v);
-				FIFOBatch[FIFOBatchPosition++] = VERTEX_PACK(currVerts[currVert].x, currVerts[currVert].y);
-				FIFOBatch[FIFOBatchPosition++] = currVerts[currVert].z;
-				++currVert;
-				break;
-			}
-			++FIFOLookupId;
-			FIFOLookupId %= 3;
+
+		Vertex* vertices = &currHeader->vertices;
+
+		for (int j = 0; j < currHeader->count; ++j) {
+			PushFIFOCommand(&fifo, CMD_TEXCOORD, vertices[j].u, vertices[j].v, 0);
+			PushFIFOCommand(&fifo, CMD_NORMAL, vertices[j].normal, 0, 0);
+			PushFIFOCommand(&fifo, CMD_POS, vertices[j].x, vertices[j].y, vertices[j].z);
 		}
-		dsnm.FIFOBatches[i] = FIFOBatch;
+
+		dsnm.FIFOBatches[i] = FinalizeFIFO(&fifo);
 		uint32_t toAdd = (sizeof(Vertex) * (currHeader->count));
 		currHeader = (VertexHeader*)(((uint32_t)(&(currHeader->vertices))) + toAdd);
-		DC_FlushRange(FIFOBatch, sizeof(unsigned int) * (FIFOCount + 1));
+		DC_FlushRange(dsnm.FIFOBatches[i], sizeof(unsigned int) * (dsnm.FIFOBatches[i][0] + 1));
 	}
 	reference->NativeModel = malloc(sizeof(DSNativeModel));
 	DSNativeModel* dsnmptr = (DSNativeModel*)reference->NativeModel;
@@ -1193,10 +1206,15 @@ ITCM_CODE bool SetupMaterial(SDMaterial* mat, bool rigged) {
 	//glBindTexture(0, currTex->textureId);
 	//glAssignColorTable(0, currTex->paletteId);
 	if (currTex != NULL) {
-		GFX_TEX_FORMAT = currTex->textureWrite; // this is a minor optimization, but glBindTexture and glAssignColorTable accounted for about half the call time for material setup, and material setup needs to be called a lot.
-		GFX_PAL_FORMAT = currTex->paletteWrite;
-		glMatrixMode(GL_TEXTURE);
+		unsigned int addTexFlags = 0;
 		if (mat->materialFlags0 & TEXTURE_TRANSFORM) {
+			addTexFlags = 1 << 30;
+		}
+		GFX_TEX_FORMAT = (currTex->textureWrite & 0x3FFFFFFF) | addTexFlags; // this is a minor optimization, but glBindTexture and glAssignColorTable accounted for about half the call time for material setup, and material setup needs to be called a lot.
+		GFX_PAL_FORMAT = currTex->paletteWrite;
+
+		if (mat->materialFlags0 & TEXTURE_TRANSFORM) {
+			glMatrixMode(GL_TEXTURE);
 			// TODO: change to a m4x3?
 			m4x4 textureMatrix;
 			f32 c = cosLerp(mat->texRotation);
@@ -1219,9 +1237,6 @@ ITCM_CODE bool SetupMaterial(SDMaterial* mat, bool rigged) {
 			textureMatrix.m[r4z] = 0;
 			textureMatrix.m[r4w] = 0;
 			glLoadMatrix4x4(&textureMatrix);
-		}
-		else {
-			glLoadIdentity();
 		}
 		glMatrixMode(GL_MODELVIEW);
 		isTransparent = isTransparent || currTex->type == GL_RGB32_A3 || currTex->type == GL_RGB8_A5;
@@ -1459,7 +1474,6 @@ ITCM_CODE void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion
 	glMatrixMode(GL_MODELVIEW);
 	//glPushMatrix();
 	m4x4 rotationMatrix;
-	m4x4 rotationMatrixPrepared;
 	MakeRotationMatrix(rotation, &rotationMatrix);
 	rotationMatrix.m[r1w] = position->x - cameraRecentering.x;
 	rotationMatrix.m[r2w] = position->y - cameraRecentering.y;
