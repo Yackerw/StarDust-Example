@@ -545,7 +545,8 @@ void PushFIFOCommand(struct GFXFIFOBuilder* fifo, unsigned char command, int com
 	switch (command) {
 	case CMD_TEXCOORD:
 		unsigned int currUV = (commandArg1 & 0xFFFF) | (commandArg2 << 16);
-		if (fifo->prevUV != currUV) {
+		// ensure the first vertex always writes a UV
+		if (fifo->prevUV != currUV || !fifo->initializedVert) {
 			fifo->commands[fifo->commandInd] |= FIFO_TEX_COORD << packBitShift;
 			fifo->commands[fifo->usedMemory] = currUV;
 			fifo->prevUV = currUV;
@@ -690,7 +691,7 @@ void CacheRiggedModel(Model* reference) {
 			}
 		}
 
-		Vertex* vertices = &currHeader->vertices;
+		const Vertex* vertices = &currHeader->vertices;
 
 		for (int j = 0; j < currHeader->count; ++j) {
 			PushFIFOCommand(&fifo, CMD_MTX, vertices[j].boneID, 0, 0);
@@ -748,7 +749,7 @@ void CacheModel(Model* reference) {
 			}
 		}
 
-		Vertex* vertices = &currHeader->vertices;
+		const Vertex* vertices = &currHeader->vertices;
 
 		for (int j = 0; j < currHeader->count; ++j) {
 			PushFIFOCommand(&fifo, CMD_TEXCOORD, vertices[j].u, vertices[j].v, 0);
@@ -1083,7 +1084,6 @@ ITCM_CODE bool SetupMaterial(SDMaterial* mat, bool rigged) {
 	// this means that light functions more like diffuse than...well, LIGHT. so multiple lights functioning in the same manner as a modern renderer is IMPOSSIBLE,
 	// and DIFFUSE acts more like a light. this means light calculation is extremely cumbersome and, to be honest, probably not worth implementing in a broader case.
 	// HOWEVER! emission would be functional as ambient in a replacement, so if you set diffuse to proper, emission to (emiss + (ambient * color)) and ambient to pure 0...you get modern lights. weird!
-	
 
 	// alpha, stencil ID, stencil compare, don't omit polygons that intersect far plane
 	uint32_t flags = POLY_ALPHA(mat->alpha) | POLY_ID(mat->stencilPack & STENCIL_VALUE) | (((mat->stencilPack & STENCIL_SHADOW_COMPARE_WRITE) != 0) ? (3 << 4) : 0) | (1 << 12);
@@ -1819,6 +1819,22 @@ void Convert32Palette(Texture *newTex, TextureRGBA *nativeColors, int width, int
 	}
 }
 
+void Convert8Palette(Texture* newTex, TextureRGBA* nativeColors, int width, int height) {
+	TextureRGBA convertedPalette[8];
+	for (int i = 0; i < 8; ++i) {
+		convertedPalette[i] = DecodeColor(newTex->palette[i]);
+	}
+	// now convert the palette indices; recall, the upper 3 bits are used for alpha in this format
+	int currPixel = 0;
+	for (int i = 0; i < width; ++i) {
+		for (int j = 0; j < height; ++j) {
+			nativeColors[currPixel] = convertedPalette[newTex->image[currPixel] & 0x7];
+			nativeColors[currPixel].a = ((newTex->image[currPixel] & 0xF8) / (float)0xF8) * 255;
+			++currPixel;
+		}
+	}
+}
+
 void Convert256Palette(unsigned char* image, u16* palette, TextureRGBA* nativeColors, int width, int height) {
 	TextureRGBA convertedPalette[256];
 	for (int i = 0; i < 256; ++i) {
@@ -1852,6 +1868,28 @@ void Convert16Palette(Texture* newTex, TextureRGBA* nativeColors, int width, int
 			nativeColors[targetPixel + 1] = convertedPalette[(newTex->image[currPixel] & 0xF0) >> 4];
 			++currPixel;
 			targetPixel += 2;
+		}
+	}
+}
+
+void Convert4Palette(Texture* newTex, TextureRGBA* nativeColors, int width, int height) {
+	TextureRGBA convertedPalette[4];
+	for (int i = 0; i < 4; ++i) {
+		convertedPalette[i] = DecodeColor(newTex->palette[i]);
+		if (i > 0)
+			convertedPalette[i].a = 255;
+	}
+	// now convert the palette indices
+	int currPixel = 0;
+	int targetPixel = 0;
+	for (int i = 0; i < width; ++i) {
+		for (int j = 0; j < height; j += 4) {
+			nativeColors[targetPixel] = convertedPalette[newTex->image[currPixel] & 0x03];
+			nativeColors[targetPixel + 1] = convertedPalette[(newTex->image[currPixel] & 0x0C) >> 2];
+			nativeColors[targetPixel + 2] = convertedPalette[(newTex->image[currPixel] & 0x30) >> 4];
+			nativeColors[targetPixel + 3] = convertedPalette[(newTex->image[currPixel] & 0xC0) >> 6];
+			++currPixel;
+			targetPixel += 4;
 		}
 	}
 }
@@ -1902,7 +1940,7 @@ void UploadTexture(Texture* input) {
 		Convert32Palette(input, nativeColors, width, height);
 		break;
 	case 4:
-		//Convert4Palette(input, nativeColors);
+		Convert4Palette(input, nativeColors, width, height);
 		break;
 	case 16:
 		Convert16Palette(input, nativeColors, width, height);
@@ -1911,7 +1949,7 @@ void UploadTexture(Texture* input) {
 		Convert256Palette(input->image, input->palette, nativeColors, width, height);
 		break;
 	case 8:
-		//Convert8Palette(input, nativeColors);
+		Convert8Palette(input, nativeColors, width, height);
 		break;
 	case 0:
 		ConvertPaletteless(input->image, nativeColors, width, height);
@@ -3855,9 +3893,9 @@ void Initialize3D(bool multipass, bool subBGFull) {
 	glEnable(GL_TEXTURE_2D);
 
 	glEnable(GL_BLEND);
+	glEnable(GL_ALPHA_TEST);
 
 	vramSetBankA(VRAM_A_TEXTURE);
-	vramSetBankB(VRAM_B_TEXTURE);
 	if (subBGFull) {
 		vramSetBankC(VRAM_C_SUB_BG);
 	}
@@ -3872,6 +3910,7 @@ void Initialize3D(bool multipass, bool subBGFull) {
 		vramSetBankH(VRAM_H_SUB_BG);
 	}
 	if (subBGFull && !multipass) {
+		vramSetBankB(VRAM_B_TEXTURE);
 		vramSetBankD(VRAM_D_TEXTURE_SLOT2);
 	}
 	else if (multipass) {
@@ -3882,6 +3921,7 @@ void Initialize3D(bool multipass, bool subBGFull) {
 		//memset(storageTexture, 0xFFFFFFFF, sizeof(unsigned short) * 256 * 192);
 	}
 	else {
+		vramSetBankB(VRAM_B_TEXTURE);
 		vramSetBankD(VRAM_D_TEXTURE);
 	}
 	vramSetBankE(VRAM_E_MAIN_SPRITE);
