@@ -1016,12 +1016,21 @@ ITCM_CODE void RaycastQuadTreeSub(Vec3* point, Vec3* direction, f32 length, Vec3
 			ShortToVec3(block->boundsMin, bMin);
 			ShortToVec3(block->boundsMax, bMax);
 			if (AABBCheck(AABBMin, AABBMax, &bMin, &bMax)) {
+				bool hit = false;
 				if (RayOnAABB(point, direction, &bMin, &bMax, NULL, &t)) {
 					if (t <= length) {
 						hitBlocks[*hitBlockPosition] = block;
 						*hitBlockPosition += 1;
 						*triCount += block->triCount;
+						hit = true;
 					}
+				}
+				if (hit == false && (point->x >= AABBMin->x && point->x <= AABBMax->x &&
+					point->y >= AABBMin->y && point->y <= AABBMax->y &&
+					point->z >= AABBMin->z && point->z <= AABBMax->z)) {
+					hitBlocks[*hitBlockPosition] = block;
+					*hitBlockPosition += 1;
+					*triCount += block->triCount;
 				}
 			}
 		}
@@ -1109,16 +1118,18 @@ ITCM_CODE bool RayOnMesh(Vec3* point, Vec3* direction, f32 length, Vec3* rayMin,
 	Vec3 AABBMin, AABBMax;
 	Vec3Subtraction(&mesh->AABBPosition, &mesh->AABBBounds, &AABBMin);
 	Vec3Addition(&mesh->AABBPosition, &mesh->AABBBounds, &AABBMax);
-	if (RayOnAABB(&newPoint, &newDirection, &AABBMin, &AABBMax, NULL, &tempt)) {
-		if (tempt > newLength) {
-			return false;
+
+	// simple AABB point check
+	if (!(newPoint.x >= AABBMin.x && newPoint.x <= AABBMax.x &&
+		newPoint.y >= AABBMin.y && newPoint.y <= AABBMax.y &&
+		newPoint.z >= AABBMin.z && newPoint.z <= AABBMax.z)) {
+		// not within AABB, check if we intersect
+		if (RayOnAABB(&newPoint, &newDirection, &AABBMin, &AABBMax, NULL, &tempt)) {
+			if (tempt > newLength) {
+				return false;
+			}
 		}
-	}
-	else {
-		// simple AABB point check
-		if (!(newPoint.x >= AABBMin.x && newPoint.x <= AABBMax.x &&
-			newPoint.y >= AABBMin.y && newPoint.y <= AABBMax.y &&
-			newPoint.z >= AABBMin.z && newPoint.z <= AABBMax.z)) {
+		else {
 			return false;
 		}
 	}
