@@ -2829,7 +2829,7 @@ Animator *CreateAnimator(Model *referenceModel) {
 		w3.m[r1w] = currItem->currPosition.x;
 		w3.m[r2w] = currItem->currPosition.y;
 		w3.m[r3w] = currItem->currPosition.z;
-		memcpy(&w3, &retValue->items[i].matrix, sizeof(m4x4));
+		memcpy(&retValue->items[i].matrix, &w3, sizeof(m4x4));
 	}
 	return retValue;
 }
