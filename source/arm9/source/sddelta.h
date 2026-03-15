@@ -1,10 +1,14 @@
-#ifndef SDDELTA
-#define SDDELTA
+#pragma once
 #include "sdmath.h"
-extern f32 deltaTime;
-extern bool deltaTimeEngine;
-void InitDeltaTime();
-void UpdateDeltaTime();
-void StartBenchmark();
-int StopBenchmark();
-#endif
+
+class SDTime {
+private:
+    SDTime();
+public:
+    static Fixed deltaTime;
+    static bool deltaTimeEngine;
+    static void InitDeltaTime();
+    static void UpdateDeltaTime();
+    static void StartBenchmark();
+    static int StopBenchmark();
+};

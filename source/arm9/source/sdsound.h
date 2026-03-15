@@ -1,5 +1,4 @@
-#ifndef SDSOUND
-#define SDSOUND
+#pragma once
 #include <nds.h>
 #include "sdmath.h"
 #include <stdio.h>
@@ -36,9 +35,9 @@ typedef struct {
 } SoundEffect;
 
 typedef struct {
-	f32 pan;
-	f32 volume;
-	f32 pitch;
+	Fixed pan;
+	Fixed volume;
+	Fixed pitch;
 	bool loop;
 	unsigned int loopEnd;
 	unsigned int loopStart;
@@ -48,9 +47,9 @@ typedef struct {
 typedef struct PlayingSoundData PlayingSoundData;
 
 struct PlayingSoundData {
-	f32 pan;
-	f32 volume;
-	f32 pitch;
+	Fixed pan;
+	Fixed volume;
+	Fixed pitch;
 	SoundEffect* sound;
 	bool loop;
 	float soundPosition;
@@ -85,11 +84,10 @@ int PlaySound(SoundData *sound);
 
 void StopSoundEffect(int id);
 
-void SetSoundPan(int id, f32 pan);
+void SetSoundPan(int id, Fixed pan);
 
-void SetSoundVolume(int id, f32 volume);
+void SetSoundVolume(int id, Fixed volume);
 
 int GetMusicPosition();
 
 void UninitializeAudio();
-#endif

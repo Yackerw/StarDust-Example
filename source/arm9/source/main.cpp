@@ -60,18 +60,15 @@ int main() {
 	WindowsInitialization();
 #endif
 
-	Initialize3D(false, true);
+	
+	Initialize3D(false, false);
 
 	// set 3D to top screen
 	Set3DOnTop();
 
-	InitializeNetworking(1, 1);
-
 	InitializeSubBG();
 
-#ifndef _NOTDS
 	consoleDemoInit();
-#endif
 	/*volatile int* POS_TEST = (volatile int*)0x040005C4;
 	volatile int* GXSTAT = (volatile int*)0x04000600;
 	StartBenchmark();
@@ -97,13 +94,8 @@ int main() {
 	AddCollisionBetweenLayers(1, 1);
 	AddCollisionBetweenLayers(1, 2);
 
-	// register object type 0 to execute no code so we can use it for misc things
-	AddObjectType(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, false);
-	// register object type 1 to be our player
-	int playerId = AddObjectType(PlayerUpdate, PlayerStart, PlayerCollide, PlayerLateUpdate, PlayerDestroy, NULL, NULL, NULL, false);
-
 	Vec3 zero = { 0, 0, 0 };
-	Object* world = CreateObject(0, &zero, false);
+	Object* world = new Object();
 	world->mesh = LoadModel("nitro:/testmap/testmap.sdm");
 	world->meshCol = MeshColliderFromMesh(world->mesh);
 	world->scale.x = world->mesh->defaultScale;
@@ -115,23 +107,26 @@ int main() {
 		world->mesh->defaultMats[i].stencilPack = 0x1;
 	}
 
+	Player* player = new Player();
+
 	Vec3 up = { 0, 4096, 0 };
 
-	Object* player = CreateObject(playerId, &up, false);
+	//Object* player = CreateObject(playerId, &up, false);
 	
-	InitDeltaTime();
-	deltaTimeEngine = true;
+	SDTime::InitDeltaTime();
+	SDTime::deltaTimeEngine = true;
 
-	UpdateDeltaTime();
+	SDTime::UpdateDeltaTime();
 	
 	PlayMusic("nitro:/music/battle.wav", 0);
 
 	while (1) {
-		UpdateDeltaTime();
+		SDTime::UpdateDeltaTime();
 		//printf("%f\n", f32tofloat(deltaTime));
 		UpdateInput();
+		//printf("%i %i %i\n", player->position.x, player->position.y, player->position.z);
 		
-		ProcessObjects();
+		Object::ProcessObjects();
 
 #ifdef _WIN32
 		if (GetWindowClosing()) {

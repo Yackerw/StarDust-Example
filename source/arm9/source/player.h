@@ -1,21 +1,18 @@
-#ifndef PLAYER
-#define PLAYER
+#pragma once
 #include "sdobject.h"
 
-typedef struct {
+
+class Player : public Object {
+private:
 	Vec3 normal;
-	f32 cameraAngle;
+	Fixed cameraAngle;
 	bool onGround;
-	f32 vSpeed;
-} PlayerValues;
+	Fixed vSpeed;
+public:
+	Player();
+	void Update();
+	bool Collide(const CollisionHit& hitInfo);
+	void LateUpdate();
 
-void PlayerStart(Object* obj);
-
-void PlayerUpdate(Object* obj);
-
-void PlayerLateUpdate(Object* obj);
-
-void PlayerDestroy(Object* obj);
-
-bool PlayerCollide(Object* obj, CollisionHit* hitInfo);
-#endif
+	~Player();
+};

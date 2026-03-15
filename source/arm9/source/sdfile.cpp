@@ -11,11 +11,13 @@
 
 typedef struct AsyncReadData AsyncReadData;
 
+typedef void (*AsyncCallback)(void* data, bool success);
+
 struct AsyncReadData {
 	void* buffer;
 	int size;
 	FILE* f;
-	void (*callBack)(void* data, bool success);
+	AsyncCallback callBack;
 	void* callBackData;
 	int id;
 	int priority;
@@ -103,12 +105,12 @@ void fread_MusicYielding(void* buffer, int size, int count, FILE* f) {
 	UpdateMusicBuffer();
 }
 
-int fread_Async(void* buffer, int size, int count, FILE* f, int priority, void (*callBack)(void* data, bool success), void* callBackArgument) {
+int fread_Async(void* buffer, int size, int count, FILE* f, int priority, AsyncFileCallback callBack, void* callBackArgument) {
 	AsyncReadData* ard = (AsyncReadData*)malloc(sizeof(AsyncReadData));
 	ard->buffer = buffer;
 	ard->size = size * count;
 	ard->f = f;
-	ard->callBack = callBack;
+	ard->callBack = (AsyncCallback)callBack;
 	ard->callBackData = callBackArgument;
 	ard->next = NULL;
 	ard->running = false;
@@ -128,7 +130,7 @@ int fread_Async(void* buffer, int size, int count, FILE* f, int priority, void (
 	// if thread isn't active, start it
 	if (!ioThreadRunning) {
 		ioThreadRunning = true;
-		threadPrepare(&ioThread, AsyncIOHandler, NULL, &ioThreadStack[2048], 0x2C);
+		threadPrepare(&ioThread, (ThreadFunc)AsyncIOHandler, NULL, &ioThreadStack[2048], 0x2C);
 		if (ioThreadLocalStorage == NULL) {
 			ioThreadLocalStorage = (unsigned char*)malloc(threadGetLocalStorageSize());
 		}

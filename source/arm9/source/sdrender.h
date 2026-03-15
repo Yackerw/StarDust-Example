@@ -1,25 +1,13 @@
-#ifndef SDRENDER
-#define SDRENDER
+#pragma once
 #include <nds.h>
 #include "sdmath.h"
-#ifdef _WIN32
-#include "PC/Renderer/Shader.h"
-#include "PC/Renderer/Mesh.h"
-#include "PC/Renderer/Texture.h"
-#include "PC/Renderer/Window.h"
-#include "PC/Renderer/RenderTexture.h"
-
-extern Shader *defaultShader;
-extern Shader *defaultRiggedShader;
-extern Shader* defaultSpriteShader;
-#endif
 
 extern Vec3 cameraPosition;
 extern Quaternion cameraRotation;
-extern f32 cameraFOV;
-extern f32 cameraNear;
-extern f32 cameraFar;
-extern m4x4 cameraMatrix;
+extern Fixed cameraFOV;
+extern Fixed cameraNear;
+extern Fixed cameraFar;
+extern Mat4x4 cameraMatrix;
 
 enum SpriteRenderPositionX {SpriteAlignLeft, SpriteAlignCenter, SpriteAlignRight};
 enum SpriteRenderPositionY {SpriteAlignTop, SpriteAlignBottom = 2};
@@ -55,10 +43,11 @@ typedef struct {
 } VertexHeader;
 
 typedef struct {
-	m4x4 inverseMatrix;
+	Mat4x4 inverseMatrix;
 	Vec3 position;
 	Vec3 scale;
 	Quaternion rotation;
+	int padding[2];
 	int parent;
 } Bone;
 
@@ -79,7 +68,7 @@ typedef struct {
 	int skeletonCount;
 	Bone *skeleton;
 	Vec3 defaultOffset;
-	f32 defaultScale;
+	Fixed defaultScale;
 	Vec3 boundsMin;
 	Vec3 boundsMax;
 	void* NativeModel;
@@ -88,7 +77,8 @@ typedef struct {
 union KeyframeData {
 	Vec3 position;
 	Vec3 scale;
-	Quaternion rotation;
+	//Quaternion rotation;
+	Vec4 temp;
 };
 
 typedef struct {
@@ -106,7 +96,7 @@ typedef struct {
 typedef struct {
 	int version;
 	int keyframeSetCount;
-	f32 lastFrame;
+	Fixed lastFrame;
 	KeyframeSet *sets[256];
 } Animation;
 
@@ -117,17 +107,17 @@ typedef struct {
 	Vec3 prevScale;
 	Quaternion currRotation;
 	Quaternion prevRotation;
-	m4x4 matrix;
+	Mat4x4 matrix;
 } AnimatorItem;
 
 typedef struct {
-	f32 currFrame;
-	f32 lerpPrevTime;
-	f32 lerpPrevTimeTarget;
-	f32 speed;
+	Fixed currFrame;
+	Fixed lerpPrevTime;
+	Fixed lerpPrevTimeTarget;
+	Fixed speed;
 	Animation *currAnimation;
 	Animation* queuedAnims[8];
-	f32 queuedLerpTimes[8];
+	Fixed queuedLerpTimes[8];
 	int queuedAnimCount;
 	int itemCount;
 	AnimatorItem *items;
@@ -182,10 +172,10 @@ struct SDMaterial {
 	unsigned char lightingFlags;
 	unsigned char padding4;
 	unsigned char stencilPack;
-	f32 texOffsX;
-	f32 texOffsY;
-	f32 texScaleX;
-	f32 texScaleY;
+	Fixed texOffsX;
+	Fixed texOffsY;
+	Fixed texScaleX;
+	Fixed texScaleY;
 	unsigned char emissionR;
 	unsigned char emissPadding0;
 	short texRotation;
@@ -221,8 +211,14 @@ extern Texture startTexture;
 extern bool touch3D;
 
 extern bool multipassRendering;
+extern unsigned short* frameBuffer1;
+extern unsigned short* frameBuffer2;
+extern int frameBufferToRead;
 
-void SetupModelFromMemory(Model* model, char* textureDir, bool asyncTextures, void (*asyncCallback)(void* data), void* asyncCallbackData);
+typedef void (*SetupModelFromMemoryCallback)(void*);
+typedef void (*LoadTexturesCallback)(void* data, Texture* texture);
+
+void SetupModelFromMemory(Model* model, char* textureDir, bool asyncTextures, SetupModelFromMemoryCallback callback, void* asyncCallbackData);
 
 Model *LoadModel(char *input);
 
@@ -233,8 +229,6 @@ void CacheModel(Model* reference);
 // does not work with code generated models
 Model* FreeModelKeepCache(Model* model);
 
-void UpdateModel(Model* model);
-
 void RenderModel(Model *model, Vec3 *position, Vec3 *scale, Quaternion *rotation, SDMaterial *mats, int renderPriority);
 
 void UploadTexture(Texture* input);
@@ -243,11 +237,11 @@ Texture *LoadTextureFromRAM(Texture* input, bool upload, char* name);
 
 Texture *LoadTexture(char *input, bool upload);
 
-void LoadTextureAsync(char* input, bool upload, void (*callBack)(void* data, Texture* texture), void* callBackData);
+void LoadTextureAsync(char* input, bool upload, LoadTexturesCallback callBack, void* callBackData);
 
 void UnloadTexture(Texture* tex);
 
-void SetLightDir(int lightId, f32 x, f32 y, f32 z);
+void SetLightDir(int lightId, Fixed x, Fixed y, Fixed z);
 
 void SetLightColor(int lightId, char R, char G, char B);
 
@@ -269,7 +263,7 @@ Animator *CreateAnimator(Model *referenceModel);
 
 void UpdateAnimator(Animator *animator, Model *referenceModel);
 
-void PlayAnimation(Animator *animator, Animation *animation, f32 lerpTime);
+void PlayAnimation(Animator *animator, Animation *animation, Fixed lerpTime);
 
 void SetSDMaterialTexture(SDMaterial *mat, Texture *texture);
 
@@ -283,9 +277,9 @@ void SetupCameraMatrix();
 
 void SetupCameraMatrixPartial(int x, int y, int width, int height);
 
-bool AABBInCamera(Vec3* min, Vec3* max, m4x4* transform);
+bool AABBInCamera(Vec3* min, Vec3* max, Mat4x4* transform);
 
-bool QueueAnimation(Animator* animator, Animation* animation, f32 lerpTime);
+bool QueueAnimation(Animator* animator, Animation* animation, Fixed lerpTime);
 
 void DestroyAnimator(Animator* animator);
 
@@ -301,7 +295,7 @@ void UnloadSprite(Sprite* sprite);
 
 void RenderSprite(Sprite* sprite, int x, int y, bool flipX, bool flipY, int xAlign, int yAlign);
 
-void RenderSpriteScaled(Sprite* sprite, int x, int y, bool flipX, bool flipY, f32 xScale, f32 yScale, int xAlign, int yAlign);
+void RenderSpriteScaled(Sprite* sprite, int x, int y, bool flipX, bool flipY, Fixed xScale, Fixed yScale, int xAlign, int yAlign);
 
 void FinalizeSprites();
 
@@ -314,10 +308,8 @@ void Set3DOnBottom();
 
 void Initialize3D(bool multipass, bool subBGFull);
 
-void SetMaterialLightOverride(SDMaterial *material, int id, char R, char G, char B, f32 normalX, f32 normalY, f32 normalZ);
+void SetMaterialLightOverride(SDMaterial *material, int id, char R, char G, char B, Fixed normalX, Fixed normalY, Fixed normalZ);
 
 void QueueModelRender(Model* model, Vec3* position, Vec3* scale, Quaternion* rotation, SDMaterial* mats, Animator* animator, int renderPriority);
 
 void RenderModelQueue(bool flush);
-
-#endif

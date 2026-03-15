@@ -1,7 +1,5 @@
-#ifndef SDINPUT
-#define SDINPUT
+#pragma once
 #include "sdmath.h"
-#include <stdbool.h>
 
 enum INPUT_KEY {INPUT_A, INPUT_B, INPUT_SELECT, INPUT_START, INPUT_RIGHT, INPUT_LEFT, INPUT_UP, INPUT_DOWN, INPUT_R, INPUT_L, INPUT_X, INPUT_Y, INPUT_TOUCH};
 
@@ -14,5 +12,3 @@ bool GetKeyUp(int key);
 unsigned int GetCurrentKeyState();
 int GetTouchScreenX(int origin);
 int GetTouchScreenY(int origin);
-
-#endif

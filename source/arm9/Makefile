@@ -26,7 +26,7 @@ GRAPHICS :=
 #---------------------------------------------------------------------------------
 ARCH := -march=armv5te -mtune=arm946e-s
 
-CFLAGS   := -g -Wall -O2 -ffunction-sections -fdata-sections -std=gnu99\
+CFLAGS   := -g -Wall -O2 -ffunction-sections -fdata-sections -std=gnu++11\
 			-fomit-frame-pointer\
 			-ffast-math\
 			-msoft-float\

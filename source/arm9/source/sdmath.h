@@ -1,64 +1,185 @@
-#ifndef SDMATH
-#define SDMATH
+#pragma once
 #include <nds.h>
 
-typedef int f32;
+class Fixed {
+public:
+	int value;
 
-typedef struct {
-	f32 x;
-	f32 y;
-	f32 z;
-	f32 w;
-} Quaternion;
+	Fixed(int x) {
+		value = x;
+	}
+	Fixed()=default;
 
-typedef struct {
-	union {
-		struct {
-			f32 x;
-			f32 y;
-			f32 z;
-			f32 w;
-		};
-		f32 coords[4];
-	};
-} Vec4;
+	Fixed operator+(const Fixed right) const {
+		return {value+right.value};
+	}
+	Fixed operator-(const Fixed right) const {
+		return {value-right.value};
+	}
+	Fixed operator*(const Fixed right) const;
+	Fixed operator/(const Fixed right) const;
+	Fixed operator%(const Fixed right) const {
+		return {value % right.value};
+	}
+	Fixed operator=(int right) {
+		value = right;
+		return *this;
+	}
+	Fixed operator-=(const Fixed right) {
+		value -= right.value;
+		return *this;
+	}
+	Fixed operator+=(const Fixed right) {
+		value += right.value;
+		return *this;
+	}
+	Fixed operator*=(const Fixed right);
+	Fixed operator/=(const Fixed right);
+	Fixed operator%=(const Fixed right) {
+		value %= right.value;
+		return *this;
+	}
+	Fixed operator-() const {
+		return {-value};
+	}
+	bool operator==(const Fixed right) const {
+		return value==right.value;
+	}
+	bool operator==(const int right) const {
+		return value==right;
+	}
+	#define condop(x) bool operator x(const Fixed right) const {\
+		return value x right.value;\
+	}
 
-typedef struct {
-	union {
-		struct {
-			float x;
-			float y;
-			float z;
-			float w;
-		};
-		float coords[4];
-	};
-} Vec4f;
+	condop(<)
+	condop(>)
+	condop(<=)
+	condop(>=)
 
-typedef struct {
-	union {
-		struct {
-			short x;
-			short y;
-			short z;
-			short w;
-		};
-		short coords[4];
-	};
-} Vec4s;
+	#undef condop
+	#define condop(x) bool operator x(const int right) const {\
+		return value x right;\
+	}
 
-typedef struct {
-	union {
-		struct {
-			f32 x;
-			f32 y;
-			f32 z;
-		};
-		f32 coords[3];
-	};
-} Vec3;
+	condop(<)
+	condop(>)
+	condop(<=)
+	condop(>=)
 
-typedef struct {
+	#undef condop
+
+	operator int() {
+		return value;
+	}
+
+	Fixed fabs() const {
+		return {abs(value)};
+	}
+};
+
+class Vec3;
+
+class Quaternion {
+public:
+	short x;
+	short y;
+	short z;
+	short w;
+	Quaternion() {
+		x = 0;
+		y = 0;
+		z = 0;
+		w = 4096;
+		return;
+	}
+	Quaternion(short x, short y, short z, short w) {
+		this->x = x;
+		this->y = y;
+		this->z = z;
+		this->w = w;
+		return;
+	}
+
+	static Quaternion FromEuler(short x, short y, short z);
+	Quaternion Normalize() const;
+	Quaternion Slerp(const Quaternion& right, Fixed t) const;
+	Quaternion Inverse() const;
+	static Quaternion FromAngleAxis(short angle, Vec3 axis);
+	static Quaternion FromToRotation(Vec3 v1, Vec3 v2);
+	Quaternion operator*(const Quaternion& right) const;
+	Vec3 operator*(const Vec3& right) const;
+	Vec3 ToEuler() const;
+};
+
+class Vec4 {
+public:
+	Fixed x;
+	Fixed y;
+	Fixed z;
+	Fixed w;
+
+	Vec4() {
+		x = 0;
+		y = 0;
+		z = 0;
+		w = 0;
+	}
+	
+	Vec4(Fixed x, Fixed y, Fixed z, Fixed w) {
+		this->x = x;
+		this->y = y;
+		this->z = z;
+		this->w = w;
+	}
+};
+
+class Vec3 {
+public:
+	Fixed x;
+	Fixed y;
+	Fixed z;
+
+	Vec3() {
+		x = 0;
+		y = 0;
+		z = 0;
+	}
+
+	Vec3(Fixed x, Fixed y, Fixed z) {
+		this->x = x;
+		this->y = y;
+		this->z = z;
+	}
+
+	Vec3(int x, int y, int z) {
+		this->x.value = x;
+		this->y.value = y;
+		this->z.value = z;
+	}
+
+	Vec3 operator*(const Vec3& right) const;
+	Vec3 operator*(const Fixed right) const;
+	Vec3 operator/(const Vec3& right) const;
+	Vec3 operator/(const Fixed right) const;
+	Vec3 operator+(const Vec3& right) const;
+	Vec3 operator-(const Vec3& right) const;
+	bool operator==(const Vec3& right) const;
+	Vec3 operator-() const {
+		return Vec3(-x,-y,-z);
+	}
+
+	Fixed Dot(const Vec3& right) const;
+	Vec3 Cross(const Vec3& right) const;
+	Fixed SqrMagnitude() const;
+	Fixed Magnitude() const;
+	Vec3 Normalize() const;
+	Vec3 Reflect(const Vec3& direction, const Vec3& surface) const;
+	static Vec3 NormalFromVerts(const Vec3& vert1, const Vec3& vert2, const Vec3& vert3);
+};
+
+class Vec3s {
+	public:
 	union {
 		struct {
 			short x;
@@ -67,9 +188,12 @@ typedef struct {
 		};
 		short coords[3];
 	};
-} Vec3s;
 
-typedef struct {
+	static Vec3s NormalFromVerts(const Vec3s& vert1, const Vec3s& vert2, const Vec3s& vert3);
+	static Vec3s NormalFromVertsFloat(const Vec3s& vert1, const Vec3s& vert2, const Vec3s& vert3);
+};
+
+struct Vec3f {
 	union {
 		struct {
 			float x;
@@ -78,38 +202,73 @@ typedef struct {
 		};
 		float coords[3];
 	};
-} Vec3f;
+};
 
-typedef struct {
-	union {
-		struct {
-			float x;
-			float y;
-		};
-		float coords[2];
-	};
-} Vec2f;
+class Vec2 {
+public:
+	Fixed x;
+	Fixed y;
 
-typedef struct {
-	union {
-		struct {
-			int x;
-			int y;
-			int z;
-		};
-		int coords[3];
-	};
-} Vec3i;
+};
 
-typedef struct {
-	f32 x;
-	f32 y;
-} Vec2;
-
-typedef struct {
+struct ViewFrustum {
 	Vec3 points[8];
 	Vec4 planes[6];
-} ViewFrustum;
+};
+
+class Mat4x4 {
+public:
+	union {
+		Fixed m[16];
+		Vec4 vm[4];
+		Fixed sm[4][4];
+		int im[16];
+	};
+
+	Mat4x4() {
+		m[0] = 4096;
+		m[1] = 0;
+		m[2] = 0;
+		m[3] = 0;
+		m[4] = 0;
+		m[5] = 4096;
+		m[6] = 0;
+		m[7] = 0;
+		m[8] = 0;
+		m[9] = 0;
+		m[10] = 4096;
+		m[11] = 0;
+		m[12] = 0;
+		m[13] = 0;
+		m[14] = 0;
+		m[15] = 4096;
+	}
+
+	Mat4x4(const Mat4x4& init) {
+		vm[0] = init.vm[0];
+		vm[1] = init.vm[1];
+		vm[2] = init.vm[2];
+		vm[3] = init.vm[3];
+	}
+
+	static Mat4x4 Translation(const Vec3& position);
+	static Mat4x4 Scale(const Vec3& scale);
+	static Mat4x4 Rotation(const Quaternion& rot);
+	static Mat4x4 FrustumToMatrix(Fixed xmin, Fixed xmax, Fixed ymin, Fixed ymax, Fixed near, Fixed far);
+	static Mat4x4 Perspective(const Fixed fov, const Fixed aspect, const Fixed near, const Fixed far);
+
+	void ExtractPlanesFromProj(
+	Vec4* left, Vec4* right,
+	Vec4* bottom, Vec4* top,
+	Vec4* near, Vec4* far) const;
+	Mat4x4 Invert() const;
+
+	Mat4x4 Multiply3x3(const Mat4x4& right) const;
+	Mat4x4 Multiply4x3(const Mat4x4& right) const;
+	Mat4x4 Transpose() const;
+	Mat4x4 operator*(const Mat4x4& right) const;
+	Vec3 operator*(const Vec3& right) const;
+};
 
 #define PI 12868
 #define FixedDegreesToRotation 91
@@ -151,100 +310,32 @@ typedef struct {
 #define r4w 15*/
 
 // should only be used if you're certain values are < 65536
-#define mulf32fast(a, b) (((a) * (b)) >> 12)
+#define mulf32fast(a, b) (((int)(a) * (int)(b)) >> 12)
 #define divf32fast(a, b) (((a) << 12) / (b))
 
-void MakeTranslationMatrix(f32 x, f32 y, f32 z, m4x4 *retValue);
+Fixed Lerp(Fixed left, Fixed right, Fixed t);
 
-void MakeScaleMatrix(f32 x, f32 y, f32 z, m4x4 *retValue);
+Fixed Atan2(Fixed y, Fixed x);
 
-void Combine3x3Matrices(m4x4 *left, m4x4 *right, m4x4 *retValue);
+Fixed Clamp(Fixed value, Fixed min, Fixed max);
 
-void CombineMatrices(m4x4 *left, m4x4 *right, m4x4 *retValue);
+Fixed Max(Fixed value, Fixed max);
 
-void CombineMatricesFull(m4x4* left, m4x4* right, m4x4* retValue);
+Fixed Min(Fixed value, Fixed min);
 
-void MakeRotationMatrix(Quaternion *input, m4x4 *retValue);
+int Max(int value, int max);
 
-void TransposeMatrix(m4x4* input, m4x4* output);
+int Min(int value, int min);
 
-void EulerToQuat(f32 x, f32 y, f32 z, Quaternion *q);
+short DeltaAngle(short dir1, short dir2);
 
-void QuatTimesQuat(Quaternion *left, Quaternion *right, Quaternion *out);
+Fixed Pow(Fixed value, Fixed toPow);
 
-void QuatNormalize(Quaternion *input);
+Fixed FixedRand(Fixed min, Fixed max);
 
-void QuatSlerp(Quaternion *left, Quaternion *right, Quaternion *out, f32 t);
+long long Int64Div(long long left, long long right);
 
-f32 DotProductNormal(Vec3* left, Vec3* right);
-
-f32 DotProduct(Vec3 *left, Vec3 *right);
-
-void CrossProduct(Vec3 *left, Vec3 *right, Vec3 *out);
-
-void QuatTimesVec3(Quaternion *quat, Vec3 *vec, Vec3 *out);
-
-void QuaternionInverse(Quaternion *quat, Quaternion *out);
-
-void QuaternionFromAngleAxis(f32 angle, Vec3 *axis, Quaternion *out);
-
-void VectorFromToRotation(Vec3 *v1, Vec3 *v2, Quaternion *out);
-
-f32 Magnitude(Vec3 *vec);
-
-f32 SqrMagnitude(Vec3 *vec);
-
-void Normalize(Vec3 *vec, Vec3 *out);
-
-void Vec3Addition(Vec3 *left, Vec3 *right, Vec3 *out);
-
-void Vec3Subtraction(Vec3 *left, Vec3 *right, Vec3 *out);
-
-void Vec3Multiplication(Vec3 *left, Vec3 *right, Vec3 *out);
-
-void Vec3Division(Vec3 *left, Vec3 *right, Vec3 *out);
-
-f32 Lerp(f32 left, f32 right, f32 t);
-
-f32 Atan2(f32 y, f32 x);
-
-void Reflect(Vec3 *a, Vec3 *b, Vec3 *out);
-
-f32 Clamp(f32 value, f32 min, f32 max);
-
-f32 Max(f32 value, f32 max);
-
-f32 Min(f32 value, f32 min);
-
-f32 DeltaAngle(f32 dir1, f32 dir2);
-
-f32 Pow(f32 value, f32 toPow);
-
-void NormalFromVerts(Vec3s *vert1, Vec3s *vert2, Vec3s *vert3, Vec3s *out);
-
-void NormalFromVertsInt(Vec3* vert1, Vec3* vert2, Vec3* vert3, Vec3* out);
-
-void NormalFromVertsFloat(Vec3s* vert1, Vec3s* vert2, Vec3s* vert3, Vec3s* out);
-
-void MakePerspectiveMatrix(f32 fov, f32 aspect, f32 near, f32 far, m4x4* ret);
-
-f32 f32Mod(f32 left, f32 right);
-
-void MatrixTimesVec3(m4x4* left, Vec3* right, Vec3* ret);
-
-f32 f32abs(f32 input);
-
-void GenerateViewFrustum(m4x4* matrix, ViewFrustum* frustumOut);
-
-void QuaternionToEuler(Quaternion* quat, Vec3* euler);
-
-f32 f32rand(f32 min, f32 max);
-
-long long Int64Div(int left, int right);
-
-bool VecEqual(Vec3* a, Vec3* b);
-
-int PushMatrixStack(m4x4* matrix);
+int PushMatrixStack(const Mat4x4& matrix);
 
 void PopMatrixStack(int count);
 
@@ -253,8 +344,7 @@ void RestoreMatrixStack(int stackPos);
 Vec3 MultiplyVectorByMatrixStack(const Vec3* v);
 
 // introduced as libnds' built in divf32 is written incorrectly, causing it to actually take twice as long as it should!
-static inline f32 divf32f(int left, int right) {
-#ifndef _NOTDS
+static inline int divf32f(int left, int right) {
 	REG_DIVCNT = DIV_64_32;
 
 	REG_DIV_NUMER = ((long long)left) << 12;
@@ -263,15 +353,11 @@ static inline f32 divf32f(int left, int right) {
 	while (REG_DIVCNT & DIV_BUSY);
 
 	return (REG_DIV_RESULT_L);
-#else
-	return divf32(left, right);
-#endif
 }
 
 // see divf32f
-static inline f32 sqrtf32f(f32 input)
+static inline int sqrtf32f(int input)
 {
-#ifndef _NOTDS
 	REG_SQRTCNT = SQRT_64;
 
 	REG_SQRT_PARAM = ((long long)input) << 12;
@@ -279,12 +365,12 @@ static inline f32 sqrtf32f(f32 input)
 	while (REG_SQRTCNT & SQRT_BUSY);
 
 	return REG_SQRT_RESULT;
-#else
-	return sqrtf32(input);
-#endif
+}
+
+__attribute__((target("arm")))
+static inline int mulf32f(int left, int right) {
+	return (int)((((int64_t)left)*((int64_t)right))>>12);
 }
 
 #define divf32 divf32f
 #define sqrtf32 sqrtf32f
-
-#endif
