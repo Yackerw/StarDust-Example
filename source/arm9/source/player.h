@@ -1,4 +1,6 @@
+
 #pragma once
+#include <nds.h>
 #include "sdobject.h"
 
 

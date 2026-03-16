@@ -1,5 +1,4 @@
 #pragma once
-#include <nds.h>
 #include "sdmath.h"
 #include "sdrender.h"
 #include "sdcollision.h"

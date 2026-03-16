@@ -1,10 +1,10 @@
-#include "sdobject.h"
-#include "sdcollision.h"
-#include "sddelta.h"
 #include <stdio.h>
 #include <nds.h>
 #include <stdlib.h>
+#include "sdobject.h"
 #include "sdsound.h"
+#include "sdcollision.h"
+#include "sddelta.h"
 
 Object *Object::first;
 
